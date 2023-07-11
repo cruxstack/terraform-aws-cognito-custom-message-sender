@@ -35,20 +35,15 @@ following tools:
 
     ```bash
     git clone https://github.com/sgtoj/terraform-docker-artifact-packager.git
+    code terraform-aws-cognito-custom-message-sender
     ```
 
-2. Open the repository in Visual Studio Code:
-
-    ```bash
-    code terraform-docker-artifact-packager
-    ```
-
-3. When prompted to "Reopen in Container", click "Reopen in Container". This
+2. When prompted to "Reopen in Container", click "Reopen in Container". This
    will start building the Docker image for the development container. If you're
    not prompted, you can open the Command Palette (F1 or Ctrl+Shift+P), and run
    the "Remote-Containers: Reopen Folder in Container" command.
 
-4. After the development container is built and started, you can use the
+3. After the development container is built and started, you can use the
    Terminal in Visual Studio Code to interact with the container. All commands
   you run in the Terminal will be executed inside the container.
 
