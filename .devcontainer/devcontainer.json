@@ -4,6 +4,9 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2.0.1": {},
   },
+  "containerEnv": {
+    "TF_PLUGIN_CACHE_DIR": "/workspaces/terraform-aws-cognito-custom-message-sender/.devcontainer/tmp/.terraform.d/"
+  },
   "customizations": {
     "vscode": {
       "settings": {
