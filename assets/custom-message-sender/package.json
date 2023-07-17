@@ -15,7 +15,7 @@
     "opa-build:sample_policy": "opa build -t wasm -e sample/validate ./src/opa/fixtures/sample_policy.rego && tar -zxv -C ./src/opa/fixtures/ -f bundle.tar.gz '/policy.wasm' && mv ./src/opa/fixtures/policy.wasm ./src/opa/fixtures/sample_policy.wasm",
     "opa-test": "npm run opa-test:sample_policy",
     "opa-test:sample_policy": "opa test -v ./src/opa/fixtures/sample_policy.rego ./src/opa/fixtures/sample_policy_test.rego",
-    "test": "jest",
+    "test": "jest --detectOpenHandles --forceExit",
     "test:coverage": "jest --coverage",
     "tsc": "npx tsc",
     "lint": "npx eslint src/**/*.ts"

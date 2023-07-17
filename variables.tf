@@ -6,7 +6,7 @@ variable "kms_key_alias_prefix" {
   default     = "alias"
 
   validation {
-    condition     = can(regex("^alias[a-zA-Z0-9/_-]*[^/]$", var.kms_key_alias_prefix))
+    condition     = can(regex("^alias[a-zA-Z0-9/_-]*[^/]*$", var.kms_key_alias_prefix))
     error_message = "KMS key alias prefix must start with 'alias' and only have alphanumeric, dashes, underscores, colons or slashes but doesn't end with a slash"
   }
 }
@@ -33,7 +33,7 @@ variable "sms_sender_policy_content" {
   type        = string
 
   validation {
-    condition     = contains(var.sms_sender_policy_content, "package cognito_custom_sender_sms_policy")
+    condition     = startswith(var.sms_sender_policy_content, "package cognito_custom_sender_sms_policy")
     error_message = "The SMS sender policy content must include 'package cognito_custom_sender_sms_policy'."
   }
 }

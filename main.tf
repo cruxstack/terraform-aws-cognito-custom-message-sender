@@ -1,7 +1,8 @@
 locals {
+  name            = coalesce(module.this.name, var.name, "cognito-custom-message-sender")
   enabled         = module.this.enabled
   aws_account_id  = try(coalesce(var.aws_account_id, data.aws_caller_identity.current[0].account_id), "")
-  aws_region_name = try(coalesce(var.aws_region_name, data.aws_caller_identity.current[0].region), "")
+  aws_region_name = try(coalesce(var.aws_region_name, data.aws_region.current[0].name), "")
 
   email_sender_enabled = false
 
@@ -12,7 +13,11 @@ locals {
 }
 
 data "aws_caller_identity" "current" {
-  count = local.enabled && (var.aws_account_id == "" || var.aws_region_name == "") ? 1 : 0
+  count = local.enabled && var.aws_account_id == "" ? 1 : 0
+}
+
+data "aws_region" "current" {
+  count = local.enabled && var.aws_region_name == "" ? 1 : 0
 }
 
 # ============================================================ message-sender ===
@@ -21,30 +26,31 @@ module "message_sender_label" {
   source  = "cloudposse/label/null"
   version = "0.25.0"
 
-  name    = var.name == "" ? "cognito-custom-message-sender" : var.name
+  name    = local.name
   context = module.this.context
 }
 
 module "message_sender_code" {
   source  = "sgtoj/artifact-packager/docker"
-  version = "1.0.0"
+  version = "1.3.1"
 
   artifact_src_path    = "/tmp/package.zip"
-  docker_build_context = abspath("${path.module}/assets/cognito-message-sender")
+  docker_build_context = abspath("${path.module}/assets/custom-message-sender")
   docker_build_target  = "package"
 
   docker_build_args = {
     SERVICE_OPA_POLICY_ENCODED = base64encode(local.sms_sender_policy_content)
   }
 
-
   context = module.message_sender_label.context
 }
 
 resource "aws_cloudwatch_log_group" "message_sender" {
-  count             = local.enabled ? 1 : 0
+  count = local.enabled ? 1 : 0
+
   name              = "/aws/lambda/${module.message_sender_label.id}"
   retention_in_days = 90
+  tags              = module.message_sender_label.tags
 }
 
 resource "aws_lambda_function" "message_sender" {
@@ -64,7 +70,7 @@ resource "aws_lambda_function" "message_sender" {
 
   environment {
     variables = {
-      LOG_LEVEL                      = var.service_log_level ? "debug" : "info"
+      LOG_LEVEL                      = var.service_log_level
       KMS_KEY_ID                     = module.kms_key.key_arn
       DDB_TABLE_HISTORY_NAME         = aws_dynamodb_table.history[0].name
       DDB_TABLE_HISTORY_TTL          = 43200
@@ -100,11 +106,11 @@ module "history_label" {
   version = "0.25.0"
 
   attributes = ["history"]
-  context    = module.this.context
+  context    = module.message_sender_label.context
 }
 
 resource "aws_dynamodb_table" "history" {
-  count = module.this.enabled ? 1 : 0
+  count = module.message_sender_label.enabled ? 1 : 0
 
   name         = module.history_label.id
   billing_mode = "PAY_PER_REQUEST"
@@ -160,10 +166,10 @@ module "kms_key" {
   source  = "cloudposse/kms-key/aws"
   version = "0.12.1"
 
-  alias                   = "${var.kms_key_alias_prefix}/${module.this.name}"
+  alias                   = "${var.kms_key_alias_prefix}/${module.message_sender_label.name}"
   deletion_window_in_days = 7
 
-  context = module.this.context
+  context = module.message_sender_label.context
 }
 
 # ---------------------------------------------------------------------- iam ---
@@ -171,7 +177,7 @@ module "kms_key" {
 resource "aws_iam_role" "this" {
   count = local.enabled ? 1 : 0
 
-  name        = module.this.id
+  name        = module.message_sender_label.id
   description = ""
 
   assume_role_policy = jsonencode({
@@ -192,7 +198,7 @@ resource "aws_iam_role" "this" {
     policy = data.aws_iam_policy_document.this[0].json
   }
 
-  tags = module.this.tags
+  tags = module.message_sender_label.tags
 }
 
 data "aws_iam_policy_document" "this" {
