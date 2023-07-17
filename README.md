@@ -1,5 +1,7 @@
 # Terraform Module: AWS Cognito Custom Message Sender
 
+:warning: **This module is not ready for use. Wait until v1.x.x release.**
+
 This Terraform module deploys a AWS Lambda function to serve as a custom SMS
 sender for AWS Cognito. The module uses Open Policy Agent (OPA) policies to
 determine whether to send an SMS message or not, and can be customized to fit
