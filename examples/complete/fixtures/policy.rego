@@ -10,7 +10,7 @@ default results = {
 	},
 }
 
-results = {
+result = {
 	"action": "block",
 	"block": {"reason": "rate limit exceeded"},
 } {
