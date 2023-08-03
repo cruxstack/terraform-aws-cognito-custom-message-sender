@@ -22,8 +22,8 @@ located within its directory.
 
 ```hcl
 module "cognito_custom_sms_sender" {
-  source  = "sgtoj/cognito-custom-message-sender/aws"
-  version = "1.x.x"
+  source  = "cruxstack/cognito-custom-message-sender/aws"
+  version = "x.x.x"
 
   sms_sender_enabled                    = true
   sms_sender_policy_content             = "<OPA policy content>"
