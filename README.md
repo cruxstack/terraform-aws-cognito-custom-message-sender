@@ -31,13 +31,12 @@ module "cognito_custom_sms_sender" {
 }
 ```
 
-## Requirements
-
-- Terraform 0.13.0 or later
-- AWS provider 5.0.0 or later
-- Docker installed and running on the machine where Terraform is executed
-
 ## Inputs
+
+In addition to the variables documented below, this module includes several
+other optional variables (e.g., `name`, `tags`, etc.) provided by the
+`cloudposse/label/null` module. Please refer to its [documentation](https://registry.terraform.io/modules/cloudposse/label/null/latest)
+for more details on these variables.
 
 | Name                                    | Description                                                                                                                                                                  |   Type   |  Default  | Required |
 |-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:--------:|:---------:|:--------:|
@@ -48,13 +47,6 @@ module "cognito_custom_sms_sender" {
 | `sms_sender_throttle_period_in_minutes` | The throttle period for the SMS sender, in minutes. It must be a positive integer.                                                                                           | `number` |   `15`    |    no    |
 | `aws_account_id`                        | The AWS account ID that the module will be deployed in.                                                                                                                      | `string` |   `""`    |    no    |
 | `aws_region_name`                       | The AWS region name where the module will be deployed.                                                                                                                       | `string` |   `""`    |    no    |
-
-### Note
-
-This module uses the `cloudposse/label/null` module for naming and tagging
-resources. As such, it also includes a `context.tf` file with additional
-optional variables you can set. Refer to the [`cloudposse/label` documentation](https://registry.terraform.io/modules/cloudposse/label/null/latest)
-for more details on these variables.
 
 ## Outputs
 
