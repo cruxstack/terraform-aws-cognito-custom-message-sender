@@ -32,7 +32,7 @@ module "message_sender_label" {
 
 module "message_sender_code" {
   source  = "cruxstack/artifact-packager/docker"
-  version = "1.3.2"
+  version = "1.3.6"
 
   artifact_src_path    = "/tmp/package.zip"
   docker_build_context = abspath("${path.module}/assets/custom-message-sender")

@@ -1,6 +1,7 @@
 package cognito_custom_sender_sms_policy
 
-default results = {
+# default to sending message
+default result = {
 	"action": "allow",
 	"allow": {
 		"message": "Your code is: {####}",
@@ -10,6 +11,7 @@ default results = {
 	},
 }
 
+# block if rate limit exceeded
 result = {
 	"action": "block",
 	"block": {"reason": "rate limit exceeded"},
