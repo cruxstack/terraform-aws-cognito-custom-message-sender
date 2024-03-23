@@ -1,6 +1,6 @@
 # --------------------------------------------------------------------- base ---
 
-FROM golang:1.19 as base
+FROM golang:1.22 as base
 
 ARG APP_VERSION=latest
 
