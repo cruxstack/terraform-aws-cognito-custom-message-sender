@@ -14,9 +14,11 @@ located within its directory.
 
 ## Features
 
-- Deploy a [custom SMS sender Lambda function for AWS Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-custom-sms-sender.html)
-- Customizable Open Policy Agent (OPA) policy to filter and throttle SMS sending
-- Ability to dynamically use SMS sender ID and short code
+- [Custom SMS sender Lambda function for AWS Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-custom-sms-sender.html)
+  - Customizable (OPA) policy to filter and throttle SMS sending
+  - Ability to dynamically use SMS sender ID and short code
+- [Custom Email sender Lambda function for AWS Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-custom-email-sender.html)
+  - Dyanmic decided which SES template to use based on context of request.
 
 ## Usage
 
@@ -24,6 +26,9 @@ located within its directory.
 module "cognito_custom_sms_sender" {
   source  = "cruxstack/cognito-custom-message-sender/aws"
   version = "x.x.x"
+
+  email_sender_enabled                    = true
+  email_sender_policy_content             = "<OPA policy content>"
 
   sms_sender_enabled                    = true
   sms_sender_policy_content             = "<OPA policy content>"
@@ -42,6 +47,8 @@ for more details on these variables.
 |-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:--------:|:---------:|:--------:|
 | `kms_key_alias_prefix`                  | The prefix for the KMS key alias. It must start with 'alias' and only include alphanumeric characters, dashes, underscores, colons or slashes, but doesn't end with a slash. | `string` | `"alias"` |    no    |
 | `service_log_level`                     | The log level for the service. It must be one of 'debug', 'info', 'warn', 'error', 'panic' or 'fatal'.                                                                       | `string` | `"info"`  |    no    |
+| `email_sender_enabled`                  | Whether or not the eamil sender is enabled.                                                                                                                                  |  `bool`  |  `false`  |    no    |
+| `email_sender_policy_content`           | The content of the Open Policy Agent policy for email sender. It must include the string 'package cognito_custom_sender_email_policy'.                                       | `string` |    n/a    |   yes    |
 | `sms_sender_enabled`                    | Whether or not the SMS sender is enabled.                                                                                                                                    |  `bool`  |  `false`  |    no    |
 | `sms_sender_policy_content`             | The content of the Open Policy Agent policy for SMS sender. It must include the string 'package cognito_custom_sender_sms_policy'.                                           | `string` |    n/a    |   yes    |
 | `sms_sender_throttle_period_in_minutes` | The throttle period for the SMS sender, in minutes. It must be a positive integer.                                                                                           | `number` |   `15`    |    no    |

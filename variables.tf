@@ -22,6 +22,22 @@ variable "service_log_level" {
   }
 }
 
+# ------------------------------------------------------------- email-sender ---
+
+variable "email_sender_enabled" {
+  description = "Whether or not the Email sender is enabled."
+  type        = bool
+  default     = false
+}
+
+variable "email_sender_policy_content" {
+  description = "The content of the Open Policy Agent policy for email sender."
+  type        = string
+  default     = ""
+}
+
+# --------------------------------------------------------------- sms-sender ---
+
 variable "sms_sender_enabled" {
   description = "Whether or not the SMS sender is enabled."
   type        = bool
@@ -31,11 +47,7 @@ variable "sms_sender_enabled" {
 variable "sms_sender_policy_content" {
   description = "The content of the Open Policy Agent policy for SMS sender."
   type        = string
-
-  validation {
-    condition     = startswith(var.sms_sender_policy_content, "package cognito_custom_sender_sms_policy")
-    error_message = "The SMS sender policy content must include 'package cognito_custom_sender_sms_policy'."
-  }
+  default     = ""
 }
 
 variable "sms_sender_throttle_period_in_minutes" {
