@@ -322,6 +322,7 @@ module "email_msg_sender_code" {
   docker_build_target  = "package"
 
   docker_build_args = {
+    APP_VERSION                = var.email_sender_version
     SERVICE_OPA_POLICY_ENCODED = terraform_data.email_msg_sender_policy[0].output
   }
 
