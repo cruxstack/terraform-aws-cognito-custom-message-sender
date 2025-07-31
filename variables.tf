@@ -24,11 +24,15 @@ variable "service_log_level" {
 
 # ------------------------------------------------------------- email-sender ---
 
+variable "email_sender_debug_mode" {
+  type    = bool
+  default = false
+}
+
 variable "email_sender_version" {
   type    = string
   default = "latest"
 }
-
 
 variable "email_sender_enabled" {
   description = "Whether or not the Email sender is enabled."

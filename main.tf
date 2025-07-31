@@ -354,6 +354,7 @@ resource "aws_lambda_function" "email_msg_sender" {
 
   environment {
     variables = {
+      DEBUG_MODE               = var.email_sender_debug_mode
       LOG_LEVEL                = var.service_log_level
       KMS_KEY_ID               = module.kms_key.key_arn
       EMAIL_SENDER_ENABLED     = local.email_sender_enabled
