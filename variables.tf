@@ -46,6 +46,18 @@ variable "email_sender_policy_content" {
   default     = ""
 }
 
+variable "sendgrid_api_key" {
+  type        = string
+  description = "The SendGrid API key used to interact with its API."
+  default     = ""
+}
+
+variable "sendgrid_email_verification_enabled" {
+  type        = bool
+  description = "Toggle to use email verification."
+  default     = false
+}
+
 # --------------------------------------------------------------- sms-sender ---
 
 variable "sms_sender_enabled" {
