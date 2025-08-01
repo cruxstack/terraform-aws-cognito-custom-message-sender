@@ -354,11 +354,12 @@ resource "aws_lambda_function" "email_msg_sender" {
 
   environment {
     variables = {
-      DEBUG_MODE               = var.email_sender_debug_mode
-      LOG_LEVEL                = var.service_log_level
-      KMS_KEY_ID               = module.kms_key.key_arn
-      EMAIL_SENDER_ENABLED     = local.email_sender_enabled
-      EMAIL_SENDER_POLICY_PATH = local.email_sender_policy_path
+      APP_DEBUG_MODE                          = var.email_sender_debug_mode
+      APP_LOG_LEVEL                           = var.service_log_level
+      APP_KMS_KEY_ID                          = module.kms_key.key_arn
+      APP_EMAIL_SENDER_POLICY_PATH            = local.email_sender_policy_path
+      APP_SENDGRID_API_KEY                    = var.sendgrid_api_key
+      APP_SENDGRID_EMAIL_VERIFICATION_ENABLED = var.sendgrid_email_verification_enabled
     }
   }
 
