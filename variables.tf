@@ -46,10 +46,54 @@ variable "email_sender_policy_content" {
   default     = ""
 }
 
+variable "email_sender_providers" {
+  type        = list(string)
+  description = "List of enabled email providers."
+  default     = ["ses"]
+
+  validation {
+    condition     = length(var.email_sender_providers) == 1
+    error_message = "Must define exactly one email provider. Support for more than one coming the future."
+  }
+
+  validation {
+    condition     = alltrue([for x in var.email_sender_providers : contains(["ses", "sendgrid"], x)])
+    error_message = "Invalid email provider"
+  }
+
+  validation {
+    condition     = !contains(var.email_sender_providers, "sendgrid") || (contains(var.email_sender_providers, "sendgrid") && try(length(var.sendgrid_email_send_api_key) > 0, false))
+    error_message = "SendGrid is set as email provider but its API is not set."
+  }
+}
+
 variable "sendgrid_api_key" {
   type        = string
-  description = "The SendGrid API key used to interact with its API."
+  description = "Deprecated: Use sendgrid_email_send_api_key"
   default     = ""
+}
+
+variable "sendgrid_email_send_api_key" {
+  type        = string
+  description = "The SendGrid API key used to interact with its Mail Send API."
+  default     = ""
+}
+
+variable "sendgrid_email_verification_api_key" {
+  type        = string
+  description = "The SendGrid API key used to interact with its Email Verification API."
+  default     = ""
+
+  validation {
+    condition     = !var.sendgrid_email_verification_enabled || (var.sendgrid_email_verification_enabled && try(length("${var.sendgrid_email_verification_api_key}${var.sendgrid_api_key}") > 0, false))
+    error_message = "SendGrid Email Verification is enabled but API Key is not set."
+  }
+}
+
+variable "sendgrid_email_verification_allowlist" {
+  type        = list(string)
+  description = "List of email domains that bypass email validation."
+  default     = []
 }
 
 variable "sendgrid_email_verification_enabled" {
