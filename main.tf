@@ -3,6 +3,7 @@ locals {
   enabled         = module.this.enabled
   aws_account_id  = try(coalesce(var.aws_account_id, data.aws_caller_identity.current[0].account_id), "")
   aws_region_name = try(coalesce(var.aws_region_name, data.aws_region.current[0].name), "")
+  aws_partition   = one(data.aws_partition.current.*.partition)
 
   email_sender_enabled        = local.enabled && var.email_sender_enabled
   email_sender_policy_path    = "./policy.rego"
@@ -12,6 +13,10 @@ locals {
   sms_sender_policy_path                = "./policy.wasm"
   sms_sender_policy_content             = var.sms_sender_policy_content
   sms_sender_throttle_period_in_minutes = 15
+
+  iam_role_policies = {
+    access = one(data.aws_iam_policy_document.this.*.json)
+  }
 }
 
 data "aws_caller_identity" "current" {
@@ -21,6 +26,11 @@ data "aws_caller_identity" "current" {
 data "aws_region" "current" {
   count = local.enabled ? 1 : 0
 }
+
+data "aws_partition" "current" {
+  count = module.this.enabled ? 1 : 0
+}
+
 
 # ============================================================ message-sender ===
 
@@ -61,17 +71,24 @@ resource "aws_iam_role" "this" {
     }]
   })
 
-  managed_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-  ]
-
-  inline_policy {
-    name   = "message-sender-access"
-    policy = data.aws_iam_policy_document.this[0].json
-  }
-
   tags = module.message_sender_label.tags
 }
+
+resource "aws_iam_role_policy_attachment" "ssm_managed_instance_core" {
+  count = module.this.enabled ? 1 : 0
+
+  role       = aws_iam_role.this[0].name
+  policy_arn = "arn:${local.aws_partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "this" {
+  for_each = { for k, v in local.iam_role_policies : k => v if module.this.enabled }
+
+  name   = each.key
+  role   = resource.aws_iam_role.this[0].name
+  policy = each.value
+}
+
 
 data "aws_iam_policy_document" "this" {
   count = local.enabled ? 1 : 0
