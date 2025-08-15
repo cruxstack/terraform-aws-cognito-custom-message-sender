@@ -53,7 +53,7 @@ variable "email_sender_providers" {
 
   validation {
     condition     = length(var.email_sender_providers) == 1
-    error_message = "Must define exactly one email provider. Support for more than one coming the future."
+    error_message = "Must define exactly one email provider. Support for more than one coming in the future."
   }
 
   validation {
