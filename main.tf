@@ -2,7 +2,7 @@ locals {
   name            = coalesce(module.this.name, var.name, "cognito-custom-message-sender")
   enabled         = module.this.enabled
   aws_account_id  = try(coalesce(var.aws_account_id, data.aws_caller_identity.current[0].account_id), "")
-  aws_region_name = try(coalesce(var.aws_region_name, data.aws_region.current[0].name), "")
+  aws_region_name = try(coalesce(var.aws_region_name, data.aws_region.current[0].region), "")
   aws_partition   = one(data.aws_partition.current.*.partition)
 
   email_sender_enabled        = local.enabled && var.email_sender_enabled
