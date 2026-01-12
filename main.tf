@@ -380,7 +380,7 @@ resource "aws_lambda_function" "email_msg_sender" {
       APP_EMAIL_SENDER_POLICY_PATH            = local.email_sender_policy_path
       APP_EMAIL_VERIFICATION_ENABLED          = coalesce(var.sendgrid_email_verification_enabled, var.email_verification_enabled)
       APP_EMAIL_VERIFICATION_PROVIDER         = var.email_verification_provider
-      APP_EMAIL_VERIFICATION_WHITELIST        = join(",", coalescelist(var.sendgrid_email_verification_allowlist, var.email_verification_whitelist))
+      APP_EMAIL_VERIFICATION_WHITELIST        = join(",", concat(var.sendgrid_email_verification_allowlist, var.email_verification_whitelist))
       APP_EMAIL_FAILOVER_ENABLED              = var.email_failover_enabled
       APP_EMAIL_FAILOVER_PROVIDERS            = join(",", var.email_failover_providers)
       APP_EMAIL_FAILOVER_CACHE_TTL            = var.email_failover_cache_ttl
