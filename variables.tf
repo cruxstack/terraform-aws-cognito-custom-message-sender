@@ -67,10 +67,62 @@ variable "email_sender_providers" {
   }
 }
 
+variable "email_verification_enabled" {
+  type        = bool
+  description = "Toggle to enable email verification before sending."
+  default     = true
+}
+
+variable "email_verification_provider" {
+  type        = string
+  description = "Email verification provider: 'offline' (RFC 5322 format validation) or 'sendgrid' (advanced checks)."
+  default     = "offline"
+
+  validation {
+    condition     = contains(["offline", "sendgrid"], var.email_verification_provider)
+    error_message = "Email verification provider must be 'offline' or 'sendgrid'."
+  }
+}
+
+variable "email_verification_whitelist" {
+  type        = list(string)
+  description = "Comma-separated domains that skip email verification."
+  default     = []
+}
+
+variable "email_failover_enabled" {
+  type        = bool
+  description = "Enable automatic provider failover when primary provider is unavailable."
+  default     = false
+}
+
+variable "email_failover_providers" {
+  type        = list(string)
+  description = "List of failover providers to try when primary provider fails (e.g., ['sendgrid'])."
+  default     = []
+
+  validation {
+    condition     = alltrue([for x in var.email_failover_providers : contains(["ses", "sendgrid"], x)])
+    error_message = "Invalid failover provider. Must be 'ses' or 'sendgrid'."
+  }
+}
+
+variable "email_failover_cache_ttl" {
+  type        = string
+  description = "Health check cache duration for failover (Go duration format, e.g., '30s')."
+  default     = "30s"
+}
+
 variable "sendgrid_api_key" {
   type        = string
   description = "Deprecated: Use sendgrid_email_send_api_key"
   default     = ""
+}
+
+variable "sendgrid_api_host" {
+  type        = string
+  description = "SendGrid API base URL."
+  default     = "https://api.sendgrid.com"
 }
 
 variable "sendgrid_email_send_api_key" {
@@ -85,21 +137,23 @@ variable "sendgrid_email_verification_api_key" {
   default     = ""
 
   validation {
-    condition     = !var.sendgrid_email_verification_enabled || (var.sendgrid_email_verification_enabled && try(length("${var.sendgrid_email_verification_api_key}${var.sendgrid_api_key}") > 0, false))
-    error_message = "SendGrid Email Verification is enabled but API Key is not set."
+    condition     = !(var.email_verification_provider == "sendgrid") || (var.email_verification_provider == "sendgrid" && try(length("${var.sendgrid_email_verification_api_key}${var.sendgrid_api_key}") > 0, false))
+    error_message = "SendGrid Email Verification provider is selected but API Key is not set."
   }
 }
 
+# Deprecated - kept for backwards compatibility
 variable "sendgrid_email_verification_allowlist" {
   type        = list(string)
-  description = "List of email domains that bypass email validation."
+  description = "Deprecated: Use email_verification_whitelist instead."
   default     = []
 }
 
+# Deprecated - kept for backwards compatibility
 variable "sendgrid_email_verification_enabled" {
   type        = bool
-  description = "Toggle to use email verification."
-  default     = false
+  description = "Deprecated: Use email_verification_enabled instead."
+  default     = null
 }
 
 # --------------------------------------------------------------- sms-sender ---

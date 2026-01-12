@@ -1,7 +1,8 @@
 package cognito_custom_sender_sms_policy
+import rego.v1
 
 # default to sending message
-default result = {
+default result := {
 	"action": "allow",
 	"allow": {
 		"message": "Your code is: {####}",
@@ -12,9 +13,9 @@ default result = {
 }
 
 # block if rate limit exceeded
-result = {
+result := {
 	"action": "block",
 	"block": {"reason": "rate limit exceeded"},
-} {
+} if {
 	input.history.recentAttempts > 5
 }

@@ -1,6 +1,6 @@
 # --------------------------------------------------------------------- base ---
 
-FROM golang:1.22 as base
+FROM golang:1.24 as base
 
 ARG APP_VERSION=latest
 
@@ -14,7 +14,7 @@ WORKDIR /opt/app
 RUN git clone https://github.com/cruxstack/cognito-custom-message-sender-go.git .
 RUN if [ "$APP_VERSION" != "latest" ] ; then git checkout $APP_VERSION ; fi
 RUN go mod download
-RUN go build -o bootstrap
+RUN go build -trimpath -ldflags "-s -w" -o bootstrap
 
 ARG SERVICE_OPA_POLICY_ENCODED=cGFja2FnZSBjb2duaXRvX2N1c3RvbV9zZW5kZXJfZW1haWxfcG9saWN5CnJlc3VsdCA6PSB7CgkiYWN0aW9uIjogImJsb2NrIiwKCSJibG9jayI6IHsKCQkibWVzc2FnZSI6ICJwb2xpY3kgd2FzIG5vdCBkZWZpbmVkIgoJfSwKfQo=
 RUN echo "$SERVICE_OPA_POLICY_ENCODED" | base64 -d > /opt/app/policy.rego

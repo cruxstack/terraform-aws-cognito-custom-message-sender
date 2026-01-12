@@ -8,9 +8,24 @@ locals {
 module "cognito_custom_message_sender" {
   source = "../.."
 
+  # SMS sender configuration
   sms_sender_enabled                    = true
   sms_sender_policy_content             = file("${path.module}/fixtures/policy.rego")
   sms_sender_throttle_period_in_minutes = 15
+
+  # Email sender configuration (uncomment to enable)
+  # email_sender_enabled        = true
+  # email_sender_policy_content = file("${path.module}/fixtures/email_policy.rego")
+  # email_sender_providers      = ["ses"]
+
+  # Email verification (enabled by default with offline RFC 5322 validation)
+  # email_verification_enabled  = true
+  # email_verification_provider = "offline"
+
+  # Provider failover configuration (uncomment to enable)
+  # email_failover_enabled   = true
+  # email_failover_providers = ["sendgrid"]
+  # sendgrid_email_send_api_key = var.sendgrid_api_key
 
   context = module.example_label.context
 }
@@ -24,7 +39,9 @@ module "cognito_userpool" {
 
   lambda_config = {
     kms_key_id        = module.cognito_custom_message_sender.kms_key_arn
-    custom_sms_sender = { lambda_arn = module.cognito_custom_message_sender.lambda_fn_arn, lambda_version = "V1_0" }
+    custom_sms_sender = { lambda_arn = module.cognito_custom_message_sender.sms_lambda_fn_arn, lambda_version = "V1_0" }
+    # Uncomment to use email sender
+    # custom_email_sender = { lambda_arn = module.cognito_custom_message_sender.email_lambda_fn_arn, lambda_version = "V1_0" }
   }
 
   context = module.example_label.context
