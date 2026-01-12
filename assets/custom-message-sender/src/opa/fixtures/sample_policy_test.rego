@@ -1,6 +1,5 @@
 package sample
-
-import future.keywords.if
+import rego.v1
 
 test_sample if {
 	request := {"message": "world"}

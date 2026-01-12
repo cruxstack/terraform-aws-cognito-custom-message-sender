@@ -111,6 +111,7 @@ data "aws_iam_policy_document" "this" {
         "ses:GetTemplate",
         "ses:SendEmail",
         "ses:SendTemplatedEmail",
+        "sesv2:GetAccount",
       ]
       resources = [
         "*"
@@ -371,15 +372,21 @@ resource "aws_lambda_function" "email_msg_sender" {
 
   environment {
     variables = {
-      APP_DEBUG_MODE                            = var.email_sender_debug_mode
-      APP_LOG_LEVEL                             = var.service_log_level
-      APP_KMS_KEY_ID                            = module.kms_key.key_arn
-      APP_EMAIL_PROVIDER                        = var.email_sender_providers[0]
-      APP_EMAIL_SENDER_POLICY_PATH              = local.email_sender_policy_path
-      APP_SENDGRID_EMAIL_SEND_API_KEY           = var.sendgrid_email_send_api_key
-      APP_SENDGRID_EMAIL_VERIFICATION_API_KEY   = coalesce(var.sendgrid_email_verification_api_key, var.sendgrid_api_key)
-      APP_SENDGRID_EMAIL_VERIFICATION_ALLOWLIST = join(",", var.sendgrid_email_verification_allowlist)
-      APP_SENDGRID_EMAIL_VERIFICATION_ENABLED   = var.sendgrid_email_verification_enabled
+      APP_DEBUG_MODE                          = var.email_sender_debug_mode
+      APP_LOG_LEVEL                           = var.service_log_level
+      APP_SEND_ENABLED                        = true
+      APP_KMS_KEY_ID                          = module.kms_key.key_arn
+      APP_EMAIL_PROVIDER                      = var.email_sender_providers[0]
+      APP_EMAIL_SENDER_POLICY_PATH            = local.email_sender_policy_path
+      APP_EMAIL_VERIFICATION_ENABLED          = coalesce(var.sendgrid_email_verification_enabled, var.email_verification_enabled)
+      APP_EMAIL_VERIFICATION_PROVIDER         = var.email_verification_provider
+      APP_EMAIL_VERIFICATION_WHITELIST        = join(",", coalescelist(var.sendgrid_email_verification_allowlist, var.email_verification_whitelist))
+      APP_EMAIL_FAILOVER_ENABLED              = var.email_failover_enabled
+      APP_EMAIL_FAILOVER_PROVIDERS            = join(",", var.email_failover_providers)
+      APP_EMAIL_FAILOVER_CACHE_TTL            = var.email_failover_cache_ttl
+      APP_SENDGRID_API_HOST                   = var.sendgrid_api_host
+      APP_SENDGRID_EMAIL_SEND_API_KEY         = var.sendgrid_email_send_api_key
+      APP_SENDGRID_EMAIL_VERIFICATION_API_KEY = coalesce(var.sendgrid_email_verification_api_key, var.sendgrid_api_key)
     }
   }
 
