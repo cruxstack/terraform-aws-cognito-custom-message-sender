@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Bump Version
         id: tag_version
-        uses: mathieudutour/github-tag-action@v6.1
+        uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: minor
