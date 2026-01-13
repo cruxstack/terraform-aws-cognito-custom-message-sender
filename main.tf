@@ -178,7 +178,7 @@ module "sms_msg_sender_label" {
 
 module "sms_msg_sender_code" {
   source  = "cruxstack/artifact-packager/docker"
-  version = "1.3.6"
+  version = "1.4.0"
   count   = local.sms_sender_enabled ? 1 : 0
 
   artifact_src_path    = "/tmp/package.zip"
@@ -332,7 +332,7 @@ module "email_msg_sender_label" {
 
 module "email_msg_sender_code" {
   source  = "cruxstack/artifact-packager/docker"
-  version = "1.3.6"
+  version = "1.4.0"
   count   = local.email_sender_enabled ? 1 : 0
 
   artifact_src_path    = "/tmp/package.zip"
