@@ -386,7 +386,7 @@ resource "aws_lambda_function" "email_msg_sender" {
       APP_EMAIL_FAILOVER_CACHE_TTL            = var.email_failover_cache_ttl
       APP_SENDGRID_API_HOST                   = var.sendgrid_api_host
       APP_SENDGRID_EMAIL_SEND_API_KEY         = var.sendgrid_email_send_api_key
-      APP_SENDGRID_EMAIL_VERIFICATION_API_KEY = coalesce(var.sendgrid_email_verification_api_key, var.sendgrid_api_key)
+      APP_SENDGRID_EMAIL_VERIFICATION_API_KEY = try(coalesce(var.sendgrid_email_verification_api_key, var.sendgrid_api_key), "")
     }
   }
 
