@@ -178,7 +178,7 @@ module "sms_msg_sender_label" {
 
 module "sms_msg_sender_code" {
   source  = "cruxstack/artifact-packager/docker"
-  version = "1.3.6"
+  version = "1.4.0"
   count   = local.sms_sender_enabled ? 1 : 0
 
   artifact_src_path    = "/tmp/package.zip"
@@ -332,7 +332,7 @@ module "email_msg_sender_label" {
 
 module "email_msg_sender_code" {
   source  = "cruxstack/artifact-packager/docker"
-  version = "1.3.6"
+  version = "1.4.0"
   count   = local.email_sender_enabled ? 1 : 0
 
   artifact_src_path    = "/tmp/package.zip"
@@ -380,13 +380,13 @@ resource "aws_lambda_function" "email_msg_sender" {
       APP_EMAIL_SENDER_POLICY_PATH            = local.email_sender_policy_path
       APP_EMAIL_VERIFICATION_ENABLED          = coalesce(var.sendgrid_email_verification_enabled, var.email_verification_enabled)
       APP_EMAIL_VERIFICATION_PROVIDER         = var.email_verification_provider
-      APP_EMAIL_VERIFICATION_WHITELIST        = join(",", coalescelist(var.sendgrid_email_verification_allowlist, var.email_verification_whitelist))
+      APP_EMAIL_VERIFICATION_WHITELIST        = join(",", concat(var.sendgrid_email_verification_allowlist, var.email_verification_whitelist))
       APP_EMAIL_FAILOVER_ENABLED              = var.email_failover_enabled
       APP_EMAIL_FAILOVER_PROVIDERS            = join(",", var.email_failover_providers)
       APP_EMAIL_FAILOVER_CACHE_TTL            = var.email_failover_cache_ttl
       APP_SENDGRID_API_HOST                   = var.sendgrid_api_host
       APP_SENDGRID_EMAIL_SEND_API_KEY         = var.sendgrid_email_send_api_key
-      APP_SENDGRID_EMAIL_VERIFICATION_API_KEY = coalesce(var.sendgrid_email_verification_api_key, var.sendgrid_api_key)
+      APP_SENDGRID_EMAIL_VERIFICATION_API_KEY = try(coalesce(var.sendgrid_email_verification_api_key, var.sendgrid_api_key), "")
     }
   }
 
