@@ -108,10 +108,10 @@ data "aws_iam_policy_document" "this" {
     content {
       effect = "Allow"
       actions = [
+        "ses:GetAccount",
         "ses:GetTemplate",
         "ses:SendEmail",
         "ses:SendTemplatedEmail",
-        "sesv2:GetAccount",
       ]
       resources = [
         "*"
