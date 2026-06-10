@@ -291,16 +291,28 @@ resource "aws_dynamodb_table" "sms_history" {
   }
 
   global_secondary_index {
-    name            = "userSid-index"
-    hash_key        = "userId"
-    range_key       = "sentAtEpoch"
+    name = "userSid-index"
+    key_schema {
+      attribute_name = "userId"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "sentAtEpoch"
+      key_type       = "RANGE"
+    }
     projection_type = "ALL"
   }
 
   global_secondary_index {
-    name            = "userPhoneNumber-index"
-    hash_key        = "userPhoneNumber"
-    range_key       = "sentAtEpoch"
+    name = "userPhoneNumber-index"
+    key_schema {
+      attribute_name = "userPhoneNumber"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "sentAtEpoch"
+      key_type       = "RANGE"
+    }
     projection_type = "ALL"
   }
 
