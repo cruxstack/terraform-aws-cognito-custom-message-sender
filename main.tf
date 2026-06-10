@@ -176,20 +176,39 @@ module "sms_msg_sender_label" {
   context    = module.message_sender_label.context
 }
 
-module "sms_msg_sender_code" {
-  source  = "cruxstack/artifact-packager/docker"
-  version = "1.4.0"
-  count   = local.sms_sender_enabled ? 1 : 0
+# transitional: forget pre-buildkit module.sms_msg_sender_code from state on upgrade
+removed {
+  from = module.sms_msg_sender_code
 
-  artifact_src_path    = "/tmp/package.zip"
-  docker_build_context = abspath("${path.module}/assets/custom-message-sender")
-  docker_build_target  = "package"
+  lifecycle {
+    destroy = false
+  }
+}
 
-  docker_build_args = {
+data "buildkit_context" "sms_msg_sender" {
+  count = local.sms_sender_enabled ? 1 : 0
+
+  path = abspath("${path.module}/assets/custom-message-sender")
+}
+
+resource "buildkit_artifact" "sms_msg_sender" {
+  count = local.sms_sender_enabled ? 1 : 0
+
+  build_context     = abspath("${path.module}/assets/custom-message-sender")
+  dockerfile        = "Dockerfile"
+  target            = "package"
+  artifact_src_path = "/tmp/package.zip"
+  artifact_src_type = "zip"
+  artifact_dst_path = "${path.module}/dist/sms/package.zip"
+
+  build_args = {
     SERVICE_OPA_POLICY_ENCODED = terraform_data.sms_msg_sender_policy[0].output
   }
 
-  context = module.sms_msg_sender_label.context
+  triggers = {
+    context          = data.buildkit_context.sms_msg_sender[0].digest
+    force_rebuild_id = var.sms_sender_force_rebuild_id
+  }
 }
 
 resource "aws_cloudwatch_log_group" "sms_msg_sender" {
@@ -203,13 +222,14 @@ resource "aws_cloudwatch_log_group" "sms_msg_sender" {
 resource "aws_lambda_function" "sms_msg_sender" {
   count = local.sms_sender_enabled ? 1 : 0
 
-  function_name = module.sms_msg_sender_label.id
-  filename      = module.sms_msg_sender_code[0].artifact_package_path
-  handler       = "index.handler"
-  runtime       = "nodejs18.x"
-  timeout       = 45
-  role          = aws_iam_role.this[0].arn
-  layers        = []
+  function_name    = module.sms_msg_sender_label.id
+  filename         = buildkit_artifact.sms_msg_sender[0].artifact_path
+  source_code_hash = buildkit_artifact.sms_msg_sender[0].artifact_sha256
+  handler          = "index.handler"
+  runtime          = "nodejs18.x"
+  timeout          = 45
+  role             = aws_iam_role.this[0].arn
+  layers           = []
 
   tracing_config {
     mode = "Active"
@@ -231,7 +251,7 @@ resource "aws_lambda_function" "sms_msg_sender" {
   tags = module.sms_msg_sender_label.tags
 
   depends_on = [
-    module.sms_msg_sender_code,
+    buildkit_artifact.sms_msg_sender,
     aws_cloudwatch_log_group.sms_msg_sender,
   ]
 }
@@ -342,21 +362,41 @@ module "email_msg_sender_label" {
   context    = module.message_sender_label.context
 }
 
-module "email_msg_sender_code" {
-  source  = "cruxstack/artifact-packager/docker"
-  version = "1.4.0"
-  count   = local.email_sender_enabled ? 1 : 0
+# transitional: forget pre-buildkit module.email_msg_sender_code from state on upgrade
+removed {
+  from = module.email_msg_sender_code
 
-  artifact_src_path    = "/tmp/package.zip"
-  docker_build_context = abspath("${path.module}/assets/custom-email-sender")
-  docker_build_target  = "package"
+  lifecycle {
+    destroy = false
+  }
+}
 
-  docker_build_args = {
+data "buildkit_context" "email_msg_sender" {
+  count = local.email_sender_enabled ? 1 : 0
+
+  path = abspath("${path.module}/assets/custom-email-sender")
+}
+
+resource "buildkit_artifact" "email_msg_sender" {
+  count = local.email_sender_enabled ? 1 : 0
+
+  build_context     = abspath("${path.module}/assets/custom-email-sender")
+  dockerfile        = "Dockerfile"
+  target            = "package"
+  artifact_src_path = "/tmp/package.zip"
+  artifact_src_type = "zip"
+  artifact_dst_path = "${path.module}/dist/email/package.zip"
+
+  build_args = {
     APP_VERSION                = var.email_sender_version
     SERVICE_OPA_POLICY_ENCODED = terraform_data.email_msg_sender_policy[0].output
   }
 
-  context = module.email_msg_sender_label.context
+  triggers = {
+    context          = data.buildkit_context.email_msg_sender[0].digest
+    app_version      = var.email_sender_version
+    force_rebuild_id = var.email_sender_force_rebuild_id
+  }
 }
 
 resource "aws_cloudwatch_log_group" "email_msg_sender" {
@@ -370,13 +410,14 @@ resource "aws_cloudwatch_log_group" "email_msg_sender" {
 resource "aws_lambda_function" "email_msg_sender" {
   count = local.email_sender_enabled ? 1 : 0
 
-  function_name = module.email_msg_sender_label.id
-  filename      = module.email_msg_sender_code[0].artifact_package_path
-  handler       = "bootstrap"
-  runtime       = "provided.al2023"
-  timeout       = 10
-  role          = aws_iam_role.this[0].arn
-  layers        = []
+  function_name    = module.email_msg_sender_label.id
+  filename         = buildkit_artifact.email_msg_sender[0].artifact_path
+  source_code_hash = buildkit_artifact.email_msg_sender[0].artifact_sha256
+  handler          = "bootstrap"
+  runtime          = "provided.al2023"
+  timeout          = 10
+  role             = aws_iam_role.this[0].arn
+  layers           = []
 
   tracing_config {
     mode = "Active"
@@ -405,7 +446,7 @@ resource "aws_lambda_function" "email_msg_sender" {
   tags = module.email_msg_sender_label.tags
 
   depends_on = [
-    module.email_msg_sender_code,
+    buildkit_artifact.email_msg_sender,
     aws_cloudwatch_log_group.email_msg_sender,
   ]
 }

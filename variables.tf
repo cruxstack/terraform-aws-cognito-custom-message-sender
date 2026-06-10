@@ -46,6 +46,12 @@ variable "email_sender_policy_content" {
   default     = ""
 }
 
+variable "email_sender_force_rebuild_id" {
+  description = "Change this value to force a rebuild of the email sender artifact."
+  type        = string
+  default     = ""
+}
+
 variable "email_sender_providers" {
   type        = list(string)
   description = "List of enabled email providers."
@@ -166,6 +172,12 @@ variable "sms_sender_enabled" {
 
 variable "sms_sender_policy_content" {
   description = "The content of the Open Policy Agent policy for SMS sender."
+  type        = string
+  default     = ""
+}
+
+variable "sms_sender_force_rebuild_id" {
+  description = "Change this value to force a rebuild of the SMS sender artifact."
   type        = string
   default     = ""
 }
