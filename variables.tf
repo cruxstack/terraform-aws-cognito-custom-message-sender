@@ -30,8 +30,9 @@ variable "email_sender_debug_mode" {
 }
 
 variable "email_sender_version" {
-  type    = string
-  default = "latest"
+  description = "Git tag (or other ref) of cruxstack/cognito-custom-message-sender-go to build. \"latest\" builds the default branch, which can include breaking changes."
+  type        = string
+  default     = "v2.6.0"
 }
 
 variable "email_sender_enabled" {

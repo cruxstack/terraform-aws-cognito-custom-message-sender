@@ -1,8 +1,8 @@
 # --------------------------------------------------------------------- base ---
 
-FROM golang:1.24 as base
+FROM golang:1.27 as base
 
-ARG APP_VERSION=latest
+ARG APP_VERSION=v2.6.0
 
 ENV GOOS=linux
 ENV GOARCH=amd64

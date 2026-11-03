@@ -57,7 +57,7 @@ for more details on these variables.
 | Name                            | Description                                                                                                                              |    Type     |   Default   | Required |
 |---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|:-----------:|:-----------:|:--------:|
 | `email_sender_enabled`          | Whether or not the email sender is enabled.                                                                                              |   `bool`    |   `false`   |    no    |
-| `email_sender_version`          | Version or git ref of the source code.                                                                                                   |  `string`   |  `"latest"` |    no    |
+| `email_sender_version`          | Git tag of the Go sender to build. `"latest"` builds the default branch, which can include breaking changes.                           |  `string`   |  `"v2.6.0"` |    no    |
 | `email_sender_policy_content`   | The content of the Open Policy Agent policy for email sender. Must include 'package cognito_custom_sender_email_policy'.                 |  `string`   |     n/a     |   yes    |
 | `email_sender_providers`        | List of enabled email providers.                                                                                                         | `list(str)` |  `["ses"]`  |    no    |
 | `email_verification_enabled`    | Toggle to enable email verification before sending.                                                                                      |   `bool`    |   `true`    |    no    |
