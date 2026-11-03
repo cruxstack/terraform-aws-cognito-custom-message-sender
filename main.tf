@@ -12,7 +12,7 @@ locals {
   sms_sender_enabled                    = local.enabled && var.sms_sender_enabled
   sms_sender_policy_path                = "./policy.wasm"
   sms_sender_policy_content             = var.sms_sender_policy_content
-  sms_sender_throttle_period_in_minutes = 15
+  sms_sender_throttle_period_in_minutes = var.sms_sender_throttle_period_in_minutes
 
   iam_role_policies = {
     access = one(data.aws_iam_policy_document.this.*.json)
