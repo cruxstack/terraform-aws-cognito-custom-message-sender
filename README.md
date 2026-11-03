@@ -1,261 +1,261 @@
 # Terraform Module: AWS Cognito Custom Message Sender
 
-This Terraform module deploys AWS Lambda functions to serve as custom SMS and
-email senders for AWS Cognito. The module uses Open Policy Agent (OPA) policies
-to determine whether to send messages, and can be customized to fit various use
-cases, such as throttling messages, routing emails by client ID, or preventing
-messages from being sent to specific destinations.
+This module deploys AWS Lambda functions for the Amazon Cognito
+[custom email](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-custom-email-sender.html)
+and [custom SMS](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-custom-sms-sender.html)
+sender triggers. A [Rego](https://www.openpolicyagent.org/docs/policy-language)
+policy you write decides, for every message Cognito sends, whether to send it
+and with which template, sender, and provider.
 
-For more details about the custom message sender Lambda function, see [documentation](./assets/custom-message-sender/)
-located within its directory.
+Both Lambdas run [cognito-custom-message-sender-go](https://github.com/cruxstack/cognito-custom-message-sender-go),
+built from source at a pinned version. Its documentation covers the
+[policy input and result](https://github.com/cruxstack/cognito-custom-message-sender-go/blob/main/docs/policies.md)
+in detail.
 
 ## Features
 
-- [Custom SMS sender Lambda function for AWS Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-custom-sms-sender.html)
-  - Customizable (OPA) policy to filter and throttle SMS sending
-  - Ability to dynamically use SMS sender ID and short code
-- [Custom Email sender Lambda function for AWS Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-custom-email-sender.html)
-  - Dynamic template selection based on context (client ID, trigger type, etc.)
-  - Multiple email providers: AWS SES or SendGrid
-  - Automatic provider failover (SES to SendGrid) when primary provider is unavailable
-  - Email verification support (offline RFC 5322 validation or SendGrid API)
-  - Email rate limiting per destination address, per user, and per message
-    class, backed by DynamoDB
+- **Email** through Amazon SES or SendGrid, with ordered failover when a
+  provider fails or SES sending is paused, and optional address verification
+  (offline syntax check or SendGrid Email Address Validation).
+- **SMS** through Amazon SNS, with an optional per-number history for
+  policies written for the earlier Node.js sender.
+- **Rate limiting** for email and SMS per destination, per user, and per
+  message class, in one DynamoDB table, to stop code floods and SMS pumping.
+- **Policy-driven messages:** templates, branding, and sender addresses by app
+  client, trigger, user attribute, or client metadata.
+- **Asynchronous retries** tuned for short-lived codes, with an optional
+  failure destination.
 
 ## Usage
 
 ```hcl
-module "cognito_custom_sms_sender" {
+module "cognito_message_sender" {
   source  = "cruxstack/cognito-custom-message-sender/aws"
   version = "x.x.x"
 
-  email_sender_enabled                    = true
-  email_sender_policy_content             = "<OPA policy content>"
+  email_sender_enabled        = true
+  email_sender_policy_content = file("${path.module}/email-policy.rego")
 
-  sms_sender_enabled                    = true
-  sms_sender_policy_content             = "<OPA policy content>"
-  sms_sender_throttle_period_in_minutes = 15
+  sms_sender_enabled        = true
+  sms_sender_policy_content = file("${path.module}/sms-policy.rego")
+
+  email_sender_rate_limit = { enabled = true }
+  sms_sender_rate_limit   = { enabled = true }
+}
+
+module "user_pool" {
+  source  = "cruxstack/cognito-userpool/aws"
+  version = "1.10.0"
+
+  lambda_config = {
+    kms_key_id          = module.cognito_message_sender.kms_key_arn
+    custom_email_sender = { lambda_arn = module.cognito_message_sender.email_lambda_fn_arn }
+    custom_sms_sender   = { lambda_arn = module.cognito_message_sender.sms_lambda_fn_arn }
+  }
 }
 ```
+
+A minimal email policy:
+
+```rego
+package cognito_custom_sender_email_policy
+
+import rego.v1
+
+result := {
+	"action": "allow",
+	"allow": {
+		"srcAddress": "ACME <no-reply@example.com>",
+		"providers": {"ses": {"templateId": "acme-code", "templateData": {"appName": "ACME"}}},
+	},
+}
+```
+
+The decrypted code is added to the template data as `code`. See the
+[example policies](https://github.com/cruxstack/cognito-custom-message-sender-go/tree/main/examples/policies)
+and [`examples/complete`](examples/complete).
+
+Building the sender needs Docker (through the
+[buildkit provider](https://registry.terraform.io/providers/cruxstack/buildkit))
+and network access to GitHub on the machine that runs Terraform.
 
 ## Inputs
 
-In addition to the variables documented below, this module includes several
-other optional variables (e.g., `name`, `tags`, etc.) provided by the
-`cloudposse/label/null` module. Please refer to its [documentation](https://registry.terraform.io/modules/cloudposse/label/null/latest)
-for more details on these variables.
+In addition to the variables below, this module accepts the
+[`cloudposse/label/null`](https://registry.terraform.io/modules/cloudposse/label/null/latest)
+context variables (`name`, `tags`, and so on).
 
 ### General
 
-| Name                   | Description                                                                            |   Type   | Default   | Required |
-|------------------------|----------------------------------------------------------------------------------------|:--------:|:---------:|:--------:|
-| `kms_key_alias_prefix` | The prefix for the KMS key alias.                                                      | `string` | `"alias"` |    no    |
-| `service_log_level`    | The log level for the service. Must be 'debug', 'info', 'warn', 'error', or 'fatal'.   | `string` | `"info"`  |    no    |
-| `aws_account_id`       | The AWS account ID that the module will be deployed in.                                | `string` | `""`      |    no    |
-| `aws_region_name`      | The AWS region name where the module will be deployed.                                 | `string` | `""`      |    no    |
+| Name                      | Description                                                                                       | Type     | Default    |
+| ------------------------- | ------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| `sender_version`          | Git tag of the Go sender to build. `"latest"` builds its default branch, which can include breaking changes. | `string` | `"v3.0.0"` |
+| `lambda_architecture`     | `arm64` (Graviton, lower cost) or `x86_64`.                                                       | `string` | `"arm64"`  |
+| `service_log_level`       | `debug`, `info`, `warn`, or `error`. `debug` logs every event, including user attributes.         | `string` | `"info"`   |
+| `sender_force_rebuild_id` | Change to force a rebuild of the sender artifact.                                                 | `string` | `""`       |
+| `kms_key_alias_prefix`    | Prefix of the KMS key alias.                                                                      | `string` | `"alias"`  |
+| `aws_account_id`          | AWS account ID; looked up when empty.                                                             | `string` | `""`       |
+| `aws_region_name`         | AWS region; looked up when empty.                                                                 | `string` | `""`       |
 
-### Email Sender
+### Email sender
 
-| Name                            | Description                                                                                                                              |    Type     |   Default   | Required |
-|---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|:-----------:|:-----------:|:--------:|
-| `email_sender_enabled`          | Whether or not the email sender is enabled.                                                                                              |   `bool`    |   `false`   |    no    |
-| `email_sender_version`          | Version or git ref of the source code.                                                                                                   |  `string`   |  `"latest"` |    no    |
-| `email_sender_policy_content`   | The content of the Open Policy Agent policy for email sender. Must include 'package cognito_custom_sender_email_policy'.                 |  `string`   |     n/a     |   yes    |
-| `email_sender_providers`        | List of enabled email providers.                                                                                                         | `list(str)` |  `["ses"]`  |    no    |
-| `email_verification_enabled`    | Toggle to enable email verification before sending.                                                                                      |   `bool`    |   `true`    |    no    |
-| `email_verification_provider`   | Email verification provider: 'offline' (RFC 5322 format) or 'sendgrid' (advanced checks).                                                |  `string`   | `"offline"` |    no    |
-| `email_verification_whitelist`  | List of email domains that skip email verification.                                                                                      | `list(str)` |    `[]`     |    no    |
-| `email_failover_enabled`        | Enable automatic provider failover when primary provider is unavailable.                                                                 |   `bool`    |   `false`   |    no    |
-| `email_failover_providers`      | List of failover providers to try when primary fails (e.g., `["sendgrid"]`).                                                             | `list(str)` |    `[]`     |    no    |
-| `email_failover_cache_ttl`      | Health check cache duration for failover (Go duration format, e.g., '30s').                                                              |  `string`   |   `"30s"`   |    no    |
-| `email_sender_rate_limit`       | Email rate limiting settings. See [Email Rate Limiting](#email-rate-limiting).                                                           |  `object`   | disabled    |    no    |
-| `email_sender_event_invoke_config` | Async retry settings for the email Lambda. `null` uses the AWS defaults. See [Asynchronous Invocation](#asynchronous-invocation).     |  `object`   | 300s, 1 retry |  no    |
+| Name                               | Description                                                                                          | Type           | Default         |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------- | --------------- |
+| `email_sender_enabled`             | Create the email sender.                                                                             | `bool`         | `false`         |
+| `email_sender_policy_content`      | The email policy. Must declare `package cognito_custom_sender_email_policy`.                         | `string`       | required        |
+| `email_sender_providers`           | Providers in order: `ses`, `sendgrid`. More than one enables [failover](#provider-failover).         | `list(string)` | `["ses"]`       |
+| `email_health_check_ttl`           | How long an SES account health check is cached (Go duration).                                        | `string`       | `"30s"`         |
+| `email_verification_enabled`       | Verify the address before the policy runs.                                                           | `bool`         | `true`          |
+| `email_verification_provider`      | `offline` or `sendgrid`.                                                                             | `string`       | `"offline"`     |
+| `email_verification_allowlist`     | Domains treated as valid without verification.                                                       | `list(string)` | `[]`            |
+| `email_sender_rate_limit`          | See [rate limiting](#rate-limiting).                                                                 | `object`       | disabled        |
+| `email_sender_event_invoke_config` | See [asynchronous invocation](#asynchronous-invocation). `null` uses the AWS defaults.               | `object`       | 300s, 1 retry   |
 
 ### SendGrid
 
-| Name                                | Description                                                  |   Type   |          Default            | Required |
-|-------------------------------------|--------------------------------------------------------------|:--------:|:---------------------------:|:--------:|
-| `sendgrid_api_host`                 | SendGrid API base URL.                                       | `string` | `"https://api.sendgrid.com"`|    no    |
-| `sendgrid_email_send_api_key`       | The SendGrid API key for sending emails.                     | `string` |            `""`             |    no    |
-| `sendgrid_email_verification_api_key` | The SendGrid API key for email verification.               | `string` |            `""`             |    no    |
+| Name                                  | Description                                                                         | Type     | Default                      |
+| ------------------------------------- | ----------------------------------------------------------------------------------- | -------- | ---------------------------- |
+| `sendgrid_api_host`                   | API host for sending and verification. EU accounts use `https://api.eu.sendgrid.com`. | `string` | `"https://api.sendgrid.com"` |
+| `sendgrid_email_send_api_key`         | Mail Send API key. Required when `sendgrid` is in `email_sender_providers`.         | `string` | `""`                         |
+| `sendgrid_email_verification_api_key` | Email Address Validation API key. Required when the verification provider is `sendgrid`. | `string` | `""`                  |
 
-### SMS Sender
+The keys are stored as Lambda environment variables, which anyone who can
+read the function's configuration can see.
 
-| Name                                    | Description                                                                                                                        |   Type   | Default | Required |
-|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|:--------:|:-------:|:--------:|
-| `sms_sender_enabled`                    | Whether or not the SMS sender is enabled.                                                                                          |  `bool`  | `false` |    no    |
-| `sms_sender_policy_content`             | The content of the Open Policy Agent policy for SMS sender. Must include 'package cognito_custom_sender_sms_policy'.               | `string` |   n/a   |   yes    |
-| `sms_sender_throttle_period_in_minutes` | The throttle period for the SMS sender, in minutes. Must be a positive integer.                                                    | `number` |  `15`   |    no    |
-| `sms_sender_event_invoke_config`        | Async retry settings for the SMS Lambda. `null` uses the AWS defaults. See [Asynchronous Invocation](#asynchronous-invocation).   | `object` | `null`  |    no    |
+### SMS sender
+
+| Name                                    | Description                                                                                       | Type     | Default       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- | -------- | ------------- |
+| `sms_sender_enabled`                    | Create the SMS sender.                                                                            | `bool`   | `false`       |
+| `sms_sender_policy_content`             | The SMS policy. Must declare `package cognito_custom_sender_sms_policy`. Rego v0 is accepted.     | `string` | required      |
+| `sms_sender_rate_limit`                 | See [rate limiting](#rate-limiting).                                                              | `object` | disabled      |
+| `sms_sender_history_enabled`            | Record SMS in a history table and pass `input.history.recentAttempts` to the policy.              | `bool`   | `true`        |
+| `sms_sender_throttle_period_in_minutes` | The window `input.history.recentAttempts` counts over.                                            | `number` | `15`          |
+| `sms_sender_event_invoke_config`        | See [asynchronous invocation](#asynchronous-invocation). `null` uses the AWS defaults.            | `object` | 300s, 1 retry |
 
 ## Outputs
 
-| Name                 | Description                                                             |
-|----------------------|-------------------------------------------------------------------------|
-| `kms_key_arn`        | The ARN of the KMS key.                                                 |
-| `email_lambda_fn_arn`| The ARN of the email sender Lambda function (empty if disabled).        |
-| `email_rate_limit_table_arn` | The ARN of the email rate limit DynamoDB table (empty if disabled). |
-| `sms_lambda_fn_arn`  | The ARN of the SMS sender Lambda function (empty if disabled).          |
+| Name                    | Description                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `kms_key_arn`           | KMS key Cognito encrypts codes with; the user pool's `kms_key_id`.               |
+| `email_lambda_fn_arn`   | The email sender Lambda (empty when disabled).                                   |
+| `sms_lambda_fn_arn`     | The SMS sender Lambda (empty when disabled).                                     |
+| `rate_limit_table_arn`  | The rate limit table shared by email and SMS (empty when both are disabled).     |
+| `sms_history_table_arn` | The SMS history table (empty when disabled).                                     |
 
-## Provider Failover
+## Provider failover
 
-AWS can suspend SES sending at any time for compliance reasons. Enable automatic
-failover to ensure emails continue to be delivered via an alternative provider.
+AWS can pause SES sending for an account at any time. With more than one
+provider in `email_sender_providers`, each email is sent with the first
+provider that succeeds. SES is moved to the end of the list while its account
+reports sending paused, and if every provider fails, the Lambda returns an
+error so the event is retried (and, with a failure destination, kept).
 
 ```hcl
-module "cognito_custom_message_sender" {
-  source  = "cruxstack/cognito-custom-message-sender/aws"
-
-  email_sender_enabled        = true
-  email_sender_providers      = ["ses"]
-  email_sender_policy_content = file("policy.rego")
-
-  # Enable failover with SendGrid as backup
-  email_failover_enabled  = true
-  email_failover_providers = ["sendgrid"]
-
-  # SendGrid credentials (required when in failover chain)
-  sendgrid_email_send_api_key = "SG.xxxx"
-}
+email_sender_providers      = ["ses", "sendgrid"]
+sendgrid_email_send_api_key = var.sendgrid_email_send_api_key
 ```
 
-When failover is enabled, your OPA policy **must** return template configurations
-for all providers in the failover chain:
+The policy must return a template for each provider that should be able to
+send:
 
 ```rego
 result := {
-  "action": "allow",
-  "allow": {
-    "srcAddress": "noreply@example.com",
-    "dstAddress": input.userAttributes.email,
-    "providers": {
-      "ses": {
-        "templateId": "ses-verification-template",
-        "templateData": {"appName": "MyApp"}
-      },
-      "sendgrid": {
-        "templateId": "d-abc123def456",
-        "templateData": {"appName": "MyApp"}
-      }
-    }
-  }
+	"action": "allow",
+	"allow": {
+		"srcAddress": "ACME <no-reply@example.com>",
+		"providers": {
+			"ses": {"templateId": "acme-code", "templateData": {}},
+			"sendgrid": {"templateId": "d-0123456789abcdef", "templateData": {}},
+		},
+	},
 }
 ```
 
-## Email Rate Limiting
+## Rate limiting
 
-The email sender can cap how many emails one address, one user, or one message
-class receives in a time window. It's disabled by default and requires
-`email_sender_version` `v2.6.0` or later (or `latest`). Older sender versions
-ignore the settings.
-
-With passwordless sign-in (`USER_AUTH` with `EMAIL_OTP`), anyone who has a
-public app client ID can make Cognito send a code to any registered address.
-Cognito's built-in cap is per requester IP ("Email MFA messages sent to one
-email address hourly per requester IP address: 5-20",
-[quotas](https://docs.aws.amazon.com/cognito/latest/developerguide/quotas.html)),
-and AWS WAF rate-based rules can't count by a field in a JSON request body. The
-custom email sender sees every email with its destination address, so it
-counts there.
+Rate limiting caps how many emails or SMS one destination, one user, or one
+message class can receive in a time window. Anyone with a public app client
+ID can make Cognito send codes, for example with passwordless sign-in, and
+Cognito's own caps are per requester IP. For SMS, every message costs money
+and SMS pumping targets exactly these flows.
 
 ```hcl
-module "cognito_custom_message_sender" {
-  source = "cruxstack/cognito-custom-message-sender/aws"
-
-  email_sender_enabled        = true
-  email_sender_policy_content = file("policy.rego")
-
-  email_sender_rate_limit = {
-    enabled = true
-  }
-}
+email_sender_rate_limit = { enabled = true }
+sms_sender_rate_limit   = { enabled = true }
 ```
 
-With only `enabled = true`, these limits apply per destination address:
+With only `enabled = true`, these limits apply per destination:
 
-| Class             | Cognito triggers                                       | Default limits        |
-|-------------------|--------------------------------------------------------|-----------------------|
-| `authentication`  | `CustomEmailSender_Authentication`                     | 5 per 15m, 20 per 24h |
-| `signup`          | `CustomEmailSender_SignUp`, `_ResendCode`              | 3 per 1h, 10 per 24h  |
-| `forgot_password` | `CustomEmailSender_ForgotPassword`                     | 5 per 1h              |
-| `attribute`       | `CustomEmailSender_UpdateUserAttribute`, `_VerifyUserAttribute` | 5 per 1h     |
-| `notification`    | `CustomEmailSender_AccountTakeOverNotification`        | 3 per 1h              |
-| `admin`           | `CustomEmailSender_AdminCreateUser`                    | exempt                |
+| Class             | Cognito triggers                                  | Email                 | SMS                   |
+| ----------------- | ------------------------------------------------- | --------------------- | --------------------- |
+| `authentication`  | `Authentication`                                  | 5 per 15m, 20 per 24h | 5 per 15m, 10 per 24h |
+| `signup`          | `SignUp`, `ResendCode`                            | 3 per 1h, 10 per 24h  | 3 per 1h, 5 per 24h   |
+| `forgot_password` | `ForgotPassword`                                  | 5 per 1h              | 3 per 1h, 5 per 24h   |
+| `attribute`       | `UpdateUserAttribute`, `VerifyUserAttribute`      | 5 per 1h              | 3 per 1h              |
+| `notification`    | `AccountTakeOverNotification` (email only)        | 3 per 1h              | n/a                   |
+| `admin`           | `AdminCreateUser`                                 | exempt                | exempt                |
 
 Every field is optional, and omitted fields keep their defaults, including
 fields inside a class:
 
-| Field                      | Description                                                                         | Default                        |
-|----------------------------|-------------------------------------------------------------------------------------|--------------------------------|
-| `enabled`                  | Turn rate limiting on.                                                              | `false`                        |
-| `fail_mode`                | `open` sends when DynamoDB fails; `closed` drops the email.                         | `"open"`                       |
-| `timeout`                  | Deadline for all rate limit calls per email (`ms` or `s`, at most `10s`).           | `"1s"`                         |
-| `dedupe_ttl`               | How long retry markers are kept (`m` or `h`).                                       | `"6h"`                         |
-| `metric_namespace`         | CloudWatch namespace for metrics.                                                   | `"CognitoCustomMessageSender"` |
-| `user_key`                 | Key for per-user limits: `sub` or `userName`.                                       | `"sub"`                        |
-| `normalize`                | `strip_plus_tag` and `strip_gmail_dots` address normalization.                      | both `true`                    |
-| `exempt`                   | `domains` and `classes` that are never counted.                                     | `classes = ["admin"]`          |
-| `global`                   | `mode` (`count` or `enforce`), `shards` (1-100), `degrade_fraction` (0-1].          | `count`, `4`, `0.8`            |
-| `classes.<class>`          | `destination`, `user`, and `global` lists of `{ window, max }`, plus `global_mode`.  | see table above                |
+| Field              | Description                                                                         | Default                        |
+| ------------------ | ----------------------------------------------------------------------------------- | ------------------------------ |
+| `enabled`          | Turn rate limiting on.                                                              | `false`                        |
+| `fail_mode`        | `open` sends when DynamoDB fails; `closed` drops the message.                       | `"open"`                       |
+| `timeout`          | Deadline for all rate limit calls per message (`ms` or `s`, at most `10s`).         | `"1s"`                         |
+| `dedupe_ttl`       | How long retry markers are kept (`m` or `h`).                                       | `"6h"`                         |
+| `metric_namespace` | CloudWatch namespace for metrics.                                                   | `"CognitoCustomMessageSender"` |
+| `user_key`         | Key for per-user limits: `sub` or `userName`.                                       | `"sub"`                        |
+| `normalize`        | Email only: `strip_plus_tag` and `strip_gmail_dots` address normalization.          | both `true`                    |
+| `exempt`           | `classes` that are never counted; for email also `domains`.                         | `classes = ["admin"]`          |
+| `global`           | `mode` (`count` or `enforce`), `shards` (1-100), `degrade_fraction` (0-1].          | `count`, `4`, `0.8`            |
+| `classes.<class>`  | `destination`, `user`, and `global` lists of `{ window, max }`, plus `global_mode`. | see table above                |
 
 A window is a positive integer followed by `s`, `m`, `h`, or `d` (for example
 `15m` or `24h`), and `max` is a positive integer.
 
 ```hcl
-email_sender_rate_limit = {
+sms_sender_rate_limit = {
   enabled = true
-  exempt  = { domains = ["example.com"] }
   global  = { mode = "enforce" }
   classes = {
     authentication = {
-      user   = [{ window = "1h", max = 10 }]
-      global = [{ window = "1h", max = 5000 }]
-    }
-    signup = {
-      global      = [{ window = "1h", max = 1000 }]
-      global_mode = "count"
+      destination = [{ window = "15m", max = 3 }, { window = "24h", max = 10 }]
+      global      = [{ window = "1h", max = 2000 }]
     }
   }
 }
 ```
 
-Global limits count all emails in a class and have no defaults, because they
-depend on normal traffic. In `count` mode they only log and emit a metric; set
-a max above the observed peak before switching to `enforce`. In `enforce` mode,
-once a class passes `degrade_fraction` of its global max, unverified or
-unconfirmed recipients are throttled first.
+Global limits count every message in a class and have no defaults, because
+they depend on normal traffic. They are the main defense against SMS pumping,
+which spreads across many numbers. In `count` mode they only log and emit a
+metric; set a max above the observed peak before switching to `enforce`.
 
-When enabled, the module creates:
+When either channel is enabled, the module creates one DynamoDB table
+(`PAY_PER_REQUEST`, string hash key `pk`, TTL on `ttl`) and grants the
+Lambdas `dynamodb:BatchGetItem`, `dynamodb:PutItem`, and
+`dynamodb:UpdateItem` on it. Things to know:
 
-- a DynamoDB table (`PAY_PER_REQUEST`, string hash key `pk`, TTL on `ttl`)
-- an IAM statement allowing `dynamodb:BatchGetItem`, `dynamodb:PutItem`, and
-  `dynamodb:UpdateItem` on that table only
-- the `APP_EMAIL_RATE_LIMIT_ENABLED`, `APP_EMAIL_RATE_LIMIT_TABLE_NAME`, and
-  `APP_EMAIL_RATE_LIMIT_CONFIG` environment variables on the email Lambda
-
-Things to know:
-
-- A throttled recipient gets no email, but the Cognito API call still
-  succeeds, because Cognito invokes the sender asynchronously.
+- A throttled recipient gets no message, but the Cognito API call still
+  succeeds, because Cognito invokes the senders asynchronously.
 - Lambda retries of the same event are counted once.
-- If DynamoDB fails or is slow, emails are sent (`fail_mode = "open"`).
-- The sender emits CloudWatch Embedded Metric Format metrics
-  `EmailRateLimitDecision` and `EmailRateLimitGlobalExceeded` with `class` and
-  `decision` dimensions. No metric or table item contains an address.
+- The senders emit CloudWatch Embedded Metric Format metrics
+  (`EmailRateLimitDecision`, `SMSRateLimitDecision`, and the matching
+  `...GlobalExceeded`) with `class` and `decision` dimensions. No metric or
+  table item contains an address or phone number.
 
-See the [email sender documentation](https://github.com/cruxstack/cognito-custom-message-sender-go#email-rate-limiting)
+See the sender's
+[rate limiting documentation](https://github.com/cruxstack/cognito-custom-message-sender-go/blob/main/docs/rate-limiting.md)
 for decisions, the policy input, and trade-offs.
 
-## Asynchronous Invocation
+## Asynchronous invocation
 
-Cognito invokes custom sender triggers asynchronously, so Lambda retries failed
-invocations. By default it retries twice and keeps events for up to 6 hours
-([error handling](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)).
-Cognito codes expire within minutes, so a late email rarely helps.
-
-> **Behavior change:** the email sender Lambda now keeps events for 5 minutes
-> and retries once (`email_sender_event_invoke_config`). Previously it used the
-> AWS defaults. Set `email_sender_event_invoke_config = null` to keep them.
+Cognito invokes custom sender triggers asynchronously, so Lambda retries
+failed invocations. By default AWS retries twice and keeps events for up to 6
+hours, but Cognito codes expire within minutes, so both senders default to
+keeping events for 5 minutes and retrying once.
 
 ```hcl
 email_sender_event_invoke_config = {
@@ -267,43 +267,48 @@ email_sender_event_invoke_config = {
 
 `on_failure_destination_arn` sends events that exhaust their retries or expire
 to an SQS queue, SNS topic, S3 bucket, Lambda function, or EventBridge event
-bus. The module grants the execution role permission to deliver to it. The SMS
-sender keeps the AWS defaults unless `sms_sender_event_invoke_config` is set.
+bus. The module grants the execution role permission to deliver to it. Set
+the variable to `null` to use the AWS defaults.
 
-## Migration to v1.x (Breaking Changes)
+## Upgrading to v4
 
-The upstream Go application has upgraded to v2.x which requires:
+v4 runs v3 of the Go sender for both Lambdas. The SMS Lambda moves from the
+Node.js sender to the Go sender, in place: the function, its name, its log
+group, and its history table are kept, so the user pool needs no changes.
 
-### 1. Rego v1 Syntax
+Renamed and removed variables:
 
-OPA policies must use v1 syntax with `import rego.v1` and explicit `if` keyword:
+| v3                                                         | v4                                                              |
+| ---------------------------------------------------------- | --------------------------------------------------------------- |
+| `email_sender_version`                                     | `sender_version` (now a pinned tag, not `"latest"`)             |
+| `email_sender_force_rebuild_id`, `sms_sender_force_rebuild_id` | `sender_force_rebuild_id`                                   |
+| `email_failover_enabled`, `email_failover_providers`       | `email_sender_providers = ["ses", "sendgrid"]`                  |
+| `email_failover_cache_ttl`                                 | `email_health_check_ttl`                                        |
+| `email_verification_whitelist`                             | `email_verification_allowlist`                                  |
+| `email_sender_debug_mode`                                  | removed; use `service_log_level = "debug"`                      |
+| `sendgrid_api_key`                                         | `sendgrid_email_verification_api_key`                           |
+| `sendgrid_email_verification_enabled`                      | `email_verification_enabled`                                    |
+| `sendgrid_email_verification_allowlist`                    | `email_verification_allowlist`                                  |
 
-```rego
-# Before (v0.x)
-package cognito_custom_sender_email_policy
+Other changes:
 
-result := allow_result {
-  not deny_result
-}
-
-# After (v1.x)
-package cognito_custom_sender_email_policy
-import rego.v1
-
-result := allow_result if {
-  not deny_result
-}
-```
-
-### 2. Environment Variable Changes
-
-| Deprecated Variable                         | New Variable                       |
-|---------------------------------------------|------------------------------------|
-| `sendgrid_email_verification_enabled`       | `email_verification_enabled`       |
-| `sendgrid_email_verification_allowlist`     | `email_verification_whitelist`     |
-
-The deprecated variables still work for backwards compatibility but will be
-removed in a future version.
+- **Email policies:** results that use the v1 top-level `templateID` must move
+  it under `providers.ses`, and actions other than `allow`, `deny`, or `block`
+  are errors. See the sender's
+  [upgrade guide](https://github.com/cruxstack/cognito-custom-message-sender-go/blob/main/docs/upgrading-to-v3.md).
+  Run your policy through its `devtool eval` command before you apply.
+- **SMS policies** written for the Node.js sender keep working, including
+  Rego v0 syntax. The module no longer compiles them to WebAssembly.
+- **Architecture:** both Lambdas default to `arm64`. Set
+  `lambda_architecture = "x86_64"` to keep x86.
+- **SMS retries:** the SMS Lambda now defaults to keeping events for 5 minutes
+  and retrying once, like the email Lambda.
+- **Rate limiting:** the table is shared by both channels and named
+  `<name>-rate-limit`; an existing email rate limit table is replaced, so its
+  counters start from zero. The output is now `rate_limit_table_arn`.
+- **Logs:** `service_log_level` accepts `debug`, `info`, `warn`, or `error`.
+- **Failed deliveries** now return an error from the email Lambda, so they
+  are retried and reach the failure destination.
 
 ## Contributing
 

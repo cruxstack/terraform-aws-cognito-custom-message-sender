@@ -25,14 +25,6 @@ RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/in
 # install docker
 COPY --from=docker:dind /usr/local/bin/docker /usr/local/bin/
 
-# install node.js
-ENV NODE_VERSION=18.x
-RUN curl -sL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - && \
-    apt-get install -y nodejs
-
-# install typescript
-RUN npm install -g typescript
-
 # install opa
 RUN wget https://github.com/open-policy-agent/opa/releases/latest/download/opa_linux_amd64 -O /usr/local/bin/opa && \
     chmod +x /usr/local/bin/opa
@@ -40,8 +32,5 @@ RUN wget https://github.com/open-policy-agent/opa/releases/latest/download/opa_l
 # verify installs
 RUN terraform --version \
     && aws --version \
-    && node --version \
-    && npm --version \
     && opa version \
-    && tsc --version \
     && docker --version
