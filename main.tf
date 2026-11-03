@@ -9,6 +9,34 @@ locals {
   email_sender_policy_path    = "./policy.rego"
   email_sender_policy_content = var.email_sender_policy_content
 
+  email_rate_limit         = var.email_sender_rate_limit
+  email_rate_limit_enabled = local.email_sender_enabled && local.email_rate_limit.enabled
+
+  # mirrors the APP_EMAIL_RATE_LIMIT_CONFIG schema of the go email sender
+  email_rate_limit_config = {
+    failMode        = local.email_rate_limit.fail_mode
+    timeout         = local.email_rate_limit.timeout
+    dedupeTtl       = local.email_rate_limit.dedupe_ttl
+    metricNamespace = local.email_rate_limit.metric_namespace
+    userKey         = local.email_rate_limit.user_key
+    normalize = {
+      stripPlusTag   = local.email_rate_limit.normalize.strip_plus_tag
+      stripGmailDots = local.email_rate_limit.normalize.strip_gmail_dots
+    }
+    exempt = local.email_rate_limit.exempt
+    global = {
+      mode            = local.email_rate_limit.global.mode
+      shards          = local.email_rate_limit.global.shards
+      degradeFraction = local.email_rate_limit.global.degrade_fraction
+    }
+    classes = { for name, c in local.email_rate_limit.classes : name => {
+      destination = c.destination
+      user        = c.user
+      global      = c.global
+      globalMode  = c.global_mode
+    } }
+  }
+
   sms_sender_enabled                    = local.enabled && var.sms_sender_enabled
   sms_sender_policy_path                = "./policy.wasm"
   sms_sender_policy_content             = var.sms_sender_policy_content
@@ -157,6 +185,21 @@ data "aws_iam_policy_document" "this" {
       resources = [
         aws_dynamodb_table.sms_history[0].arn,
         "${aws_dynamodb_table.sms_history[0].arn}/*"
+      ]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.email_rate_limit_enabled ? [true] : []
+    content {
+      effect = "Allow"
+      actions = [
+        "dynamodb:BatchGetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+      ]
+      resources = [
+        aws_dynamodb_table.email_rate_limit[0].arn,
       ]
     }
   }
@@ -477,7 +520,7 @@ resource "aws_lambda_function" "email_msg_sender" {
   }
 
   environment {
-    variables = {
+    variables = merge({
       APP_DEBUG_MODE                          = var.email_sender_debug_mode
       APP_LOG_LEVEL                           = var.service_log_level
       APP_SEND_ENABLED                        = true
@@ -493,7 +536,11 @@ resource "aws_lambda_function" "email_msg_sender" {
       APP_SENDGRID_API_HOST                   = var.sendgrid_api_host
       APP_SENDGRID_EMAIL_SEND_API_KEY         = var.sendgrid_email_send_api_key
       APP_SENDGRID_EMAIL_VERIFICATION_API_KEY = try(coalesce(var.sendgrid_email_verification_api_key, var.sendgrid_api_key), "")
-    }
+      }, local.email_rate_limit_enabled ? {
+      APP_EMAIL_RATE_LIMIT_ENABLED    = true
+      APP_EMAIL_RATE_LIMIT_TABLE_NAME = one(aws_dynamodb_table.email_rate_limit[*].name)
+      APP_EMAIL_RATE_LIMIT_CONFIG     = jsonencode(local.email_rate_limit_config)
+    } : {})
   }
 
   tags = module.email_msg_sender_label.tags
@@ -535,4 +582,35 @@ resource "aws_lambda_permission" "email_msg_sender" {
   action        = "lambda:InvokeFunction"
   principal     = "cognito-idp.amazonaws.com"
   source_arn    = "arn:aws:cognito-idp:${local.aws_region_name}:${local.aws_account_id}:userpool/*"
+}
+
+# ---------------------------------------------------------------------- ddb ---
+
+module "email_rate_limit_label" {
+  source  = "cloudposse/label/null"
+  version = "0.25.0"
+
+  attributes = ["rate-limit"]
+  context    = module.email_msg_sender_label.context
+}
+
+# counters and retry markers for email rate limiting; items expire via ttl
+resource "aws_dynamodb_table" "email_rate_limit" {
+  count = local.email_rate_limit_enabled ? 1 : 0
+
+  name         = module.email_rate_limit_label.id
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = module.email_rate_limit_label.tags
 }

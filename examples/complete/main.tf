@@ -27,6 +27,16 @@ module "cognito_custom_message_sender" {
   # email_failover_providers = ["sendgrid"]
   # sendgrid_email_send_api_key = var.sendgrid_api_key
 
+  # Email rate limiting (uncomment to enable; requires the email sender)
+  # email_sender_rate_limit = {
+  #   enabled = true
+  #   exempt  = { domains = ["example.com"] }
+  #   global  = { mode = "count" }
+  #   classes = {
+  #     authentication = { global = [{ window = "1h", max = 5000 }] }
+  #   }
+  # }
+
   # Async retries for the email sender (defaults shown, plus an optional
   # failure destination; set to null to use the AWS defaults)
   # email_sender_event_invoke_config = {

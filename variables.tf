@@ -173,6 +173,131 @@ variable "email_sender_event_invoke_config" {
   }
 }
 
+variable "email_sender_rate_limit" {
+  description = "Email rate limiting per destination address, per user, and per message class. Disabled by default. Requires email sender v2.6.0 or later. See the README for each field."
+  type = object({
+    enabled          = optional(bool, false)
+    fail_mode        = optional(string, "open")
+    timeout          = optional(string, "1s")
+    dedupe_ttl       = optional(string, "6h")
+    metric_namespace = optional(string, "CognitoCustomMessageSender")
+    user_key         = optional(string, "sub")
+    normalize = optional(object({
+      strip_plus_tag   = optional(bool, true)
+      strip_gmail_dots = optional(bool, true)
+    }), {})
+    exempt = optional(object({
+      domains = optional(list(string), [])
+      classes = optional(list(string), ["admin"])
+    }), {})
+    global = optional(object({
+      mode             = optional(string, "count")
+      shards           = optional(number, 4)
+      degrade_fraction = optional(number, 0.8)
+    }), {})
+    classes = optional(object({
+      authentication = optional(object({
+        destination = optional(list(object({ window = string, max = number })), [{ window = "15m", max = 5 }, { window = "24h", max = 20 }])
+        user        = optional(list(object({ window = string, max = number })), [])
+        global      = optional(list(object({ window = string, max = number })), [])
+        global_mode = optional(string)
+      }), {})
+      signup = optional(object({
+        destination = optional(list(object({ window = string, max = number })), [{ window = "1h", max = 3 }, { window = "24h", max = 10 }])
+        user        = optional(list(object({ window = string, max = number })), [])
+        global      = optional(list(object({ window = string, max = number })), [])
+        global_mode = optional(string)
+      }), {})
+      forgot_password = optional(object({
+        destination = optional(list(object({ window = string, max = number })), [{ window = "1h", max = 5 }])
+        user        = optional(list(object({ window = string, max = number })), [])
+        global      = optional(list(object({ window = string, max = number })), [])
+        global_mode = optional(string)
+      }), {})
+      attribute = optional(object({
+        destination = optional(list(object({ window = string, max = number })), [{ window = "1h", max = 5 }])
+        user        = optional(list(object({ window = string, max = number })), [])
+        global      = optional(list(object({ window = string, max = number })), [])
+        global_mode = optional(string)
+      }), {})
+      notification = optional(object({
+        destination = optional(list(object({ window = string, max = number })), [{ window = "1h", max = 3 }])
+        user        = optional(list(object({ window = string, max = number })), [])
+        global      = optional(list(object({ window = string, max = number })), [])
+        global_mode = optional(string)
+      }), {})
+      admin = optional(object({
+        destination = optional(list(object({ window = string, max = number })), [])
+        user        = optional(list(object({ window = string, max = number })), [])
+        global      = optional(list(object({ window = string, max = number })), [])
+        global_mode = optional(string)
+      }), {})
+    }), {})
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["open", "closed"], var.email_sender_rate_limit.fail_mode)
+    error_message = "email_sender_rate_limit.fail_mode must be 'open' or 'closed'."
+  }
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(ms|s)$", var.email_sender_rate_limit.timeout))
+    error_message = "email_sender_rate_limit.timeout must be a duration in ms or s (for example '500ms' or '1s'), at most 10s."
+  }
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(m|h)$", var.email_sender_rate_limit.dedupe_ttl))
+    error_message = "email_sender_rate_limit.dedupe_ttl must be a duration in m or h (for example '6h'), at least 1m."
+  }
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._/#: -]{1,255}$", var.email_sender_rate_limit.metric_namespace)) && !startswith(var.email_sender_rate_limit.metric_namespace, "AWS/")
+    error_message = "email_sender_rate_limit.metric_namespace must be a valid custom CloudWatch namespace."
+  }
+
+  validation {
+    condition     = contains(["sub", "userName"], var.email_sender_rate_limit.user_key)
+    error_message = "email_sender_rate_limit.user_key must be 'sub' or 'userName'."
+  }
+
+  validation {
+    condition     = alltrue([for c in var.email_sender_rate_limit.exempt.classes : contains(["authentication", "signup", "forgot_password", "attribute", "admin", "notification"], c)])
+    error_message = "email_sender_rate_limit.exempt.classes must contain only authentication, signup, forgot_password, attribute, admin, or notification."
+  }
+
+  validation {
+    condition     = contains(["count", "enforce"], var.email_sender_rate_limit.global.mode) && alltrue([for c in values(var.email_sender_rate_limit.classes) : contains(["count", "enforce"], coalesce(c.global_mode, "count"))])
+    error_message = "email_sender_rate_limit global.mode and classes.*.global_mode must be 'count' or 'enforce'."
+  }
+
+  validation {
+    condition     = var.email_sender_rate_limit.global.shards >= 1 && var.email_sender_rate_limit.global.shards <= 100 && floor(var.email_sender_rate_limit.global.shards) == var.email_sender_rate_limit.global.shards
+    error_message = "email_sender_rate_limit.global.shards must be an integer between 1 and 100."
+  }
+
+  validation {
+    condition     = var.email_sender_rate_limit.global.degrade_fraction > 0 && var.email_sender_rate_limit.global.degrade_fraction <= 1
+    error_message = "email_sender_rate_limit.global.degrade_fraction must be greater than 0 and at most 1."
+  }
+
+  validation {
+    condition     = alltrue([for l in flatten([for c in values(var.email_sender_rate_limit.classes) : concat(c.destination, c.user, c.global)]) : can(regex("^[1-9][0-9]{0,8}[smhd]$", l.window))])
+    error_message = "email_sender_rate_limit windows must be a positive integer followed by s, m, h, or d (for example '15m' or '24h')."
+  }
+
+  validation {
+    condition     = alltrue([for l in flatten([for c in values(var.email_sender_rate_limit.classes) : concat(c.destination, c.user, c.global)]) : l.max >= 1 && floor(l.max) == l.max])
+    error_message = "email_sender_rate_limit limits must have a positive integer max."
+  }
+
+  validation {
+    condition     = alltrue(flatten([for c in values(var.email_sender_rate_limit.classes) : [for ls in [c.destination, c.user, c.global] : length(distinct([for l in ls : l.window])) == length(ls)]]))
+    error_message = "email_sender_rate_limit windows must not repeat within one list."
+  }
+}
+
 # Deprecated - kept for backwards compatibility
 variable "sendgrid_email_verification_allowlist" {
   type        = list(string)
