@@ -66,6 +66,7 @@ for more details on these variables.
 | `email_failover_enabled`        | Enable automatic provider failover when primary provider is unavailable.                                                                 |   `bool`    |   `false`   |    no    |
 | `email_failover_providers`      | List of failover providers to try when primary fails (e.g., `["sendgrid"]`).                                                             | `list(str)` |    `[]`     |    no    |
 | `email_failover_cache_ttl`      | Health check cache duration for failover (Go duration format, e.g., '30s').                                                              |  `string`   |   `"30s"`   |    no    |
+| `email_sender_event_invoke_config` | Async retry settings for the email Lambda. `null` uses the AWS defaults. See [Asynchronous Invocation](#asynchronous-invocation).     |  `object`   | 300s, 1 retry |  no    |
 
 ### SendGrid
 
@@ -82,6 +83,7 @@ for more details on these variables.
 | `sms_sender_enabled`                    | Whether or not the SMS sender is enabled.                                                                                          |  `bool`  | `false` |    no    |
 | `sms_sender_policy_content`             | The content of the Open Policy Agent policy for SMS sender. Must include 'package cognito_custom_sender_sms_policy'.               | `string` |   n/a   |   yes    |
 | `sms_sender_throttle_period_in_minutes` | The throttle period for the SMS sender, in minutes. Must be a positive integer.                                                    | `number` |  `15`   |    no    |
+| `sms_sender_event_invoke_config`        | Async retry settings for the SMS Lambda. `null` uses the AWS defaults. See [Asynchronous Invocation](#asynchronous-invocation).   | `object` | `null`  |    no    |
 
 ## Outputs
 
@@ -135,6 +137,30 @@ result := {
   }
 }
 ```
+
+## Asynchronous Invocation
+
+Cognito invokes custom sender triggers asynchronously, so Lambda retries failed
+invocations. By default it retries twice and keeps events for up to 6 hours
+([error handling](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)).
+Cognito codes expire within minutes, so a late email rarely helps.
+
+> **Behavior change:** the email sender Lambda now keeps events for 5 minutes
+> and retries once (`email_sender_event_invoke_config`). Previously it used the
+> AWS defaults. Set `email_sender_event_invoke_config = null` to keep them.
+
+```hcl
+email_sender_event_invoke_config = {
+  maximum_event_age_in_seconds = 300 # 60-21600
+  maximum_retry_attempts       = 1   # 0-2
+  on_failure_destination_arn   = "arn:aws:sqs:us-east-1:123456789012:example-dlq"
+}
+```
+
+`on_failure_destination_arn` sends events that exhaust their retries or expire
+to an SQS queue, SNS topic, S3 bucket, Lambda function, or EventBridge event
+bus. The module grants the execution role permission to deliver to it. The SMS
+sender keeps the AWS defaults unless `sms_sender_event_invoke_config` is set.
 
 ## Migration to v1.x (Breaking Changes)
 

@@ -27,6 +27,14 @@ module "cognito_custom_message_sender" {
   # email_failover_providers = ["sendgrid"]
   # sendgrid_email_send_api_key = var.sendgrid_api_key
 
+  # Async retries for the email sender (defaults shown, plus an optional
+  # failure destination; set to null to use the AWS defaults)
+  # email_sender_event_invoke_config = {
+  #   maximum_event_age_in_seconds = 300
+  #   maximum_retry_attempts       = 1
+  #   on_failure_destination_arn   = "arn:aws:sqs:us-east-1:123456789012:example-dlq"
+  # }
+
   context = module.example_label.context
 }
 

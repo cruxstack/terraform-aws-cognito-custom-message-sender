@@ -148,6 +148,31 @@ variable "sendgrid_email_verification_api_key" {
   }
 }
 
+variable "email_sender_event_invoke_config" {
+  description = "Asynchronous invocation settings for the email sender Lambda. Cognito invokes custom sender triggers asynchronously and its codes expire within minutes, so the default keeps events for 5 minutes and retries once. Set to null to use the AWS defaults (2 retries, events kept for up to 6 hours)."
+  type = object({
+    maximum_event_age_in_seconds = optional(number, 300)
+    maximum_retry_attempts       = optional(number, 1)
+    on_failure_destination_arn   = optional(string)
+  })
+  default = {}
+
+  validation {
+    condition     = var.email_sender_event_invoke_config == null || try(var.email_sender_event_invoke_config.maximum_event_age_in_seconds >= 60 && var.email_sender_event_invoke_config.maximum_event_age_in_seconds <= 21600 && floor(var.email_sender_event_invoke_config.maximum_event_age_in_seconds) == var.email_sender_event_invoke_config.maximum_event_age_in_seconds, false)
+    error_message = "email_sender_event_invoke_config.maximum_event_age_in_seconds must be an integer between 60 and 21600."
+  }
+
+  validation {
+    condition     = var.email_sender_event_invoke_config == null || try(contains([0, 1, 2], var.email_sender_event_invoke_config.maximum_retry_attempts), false)
+    error_message = "email_sender_event_invoke_config.maximum_retry_attempts must be 0, 1, or 2."
+  }
+
+  validation {
+    condition     = var.email_sender_event_invoke_config == null || try(var.email_sender_event_invoke_config.on_failure_destination_arn == null || can(regex("^arn:[^:]+:(sqs|sns|lambda|events|s3):", var.email_sender_event_invoke_config.on_failure_destination_arn)), false)
+    error_message = "email_sender_event_invoke_config.on_failure_destination_arn must be an SQS queue, SNS topic, S3 bucket, Lambda function, or EventBridge event bus ARN."
+  }
+}
+
 # Deprecated - kept for backwards compatibility
 variable "sendgrid_email_verification_allowlist" {
   type        = list(string)
@@ -190,6 +215,31 @@ variable "sms_sender_throttle_period_in_minutes" {
   validation {
     condition     = can(regex("^[1-9][0-9]*$", var.sms_sender_throttle_period_in_minutes))
     error_message = "SMS sender throttle period must be a positive integer"
+  }
+}
+
+variable "sms_sender_event_invoke_config" {
+  description = "Asynchronous invocation settings for the SMS sender Lambda. Defaults to null, which uses the AWS defaults (2 retries, events kept for up to 6 hours)."
+  type = object({
+    maximum_event_age_in_seconds = optional(number, 300)
+    maximum_retry_attempts       = optional(number, 1)
+    on_failure_destination_arn   = optional(string)
+  })
+  default = null
+
+  validation {
+    condition     = var.sms_sender_event_invoke_config == null || try(var.sms_sender_event_invoke_config.maximum_event_age_in_seconds >= 60 && var.sms_sender_event_invoke_config.maximum_event_age_in_seconds <= 21600 && floor(var.sms_sender_event_invoke_config.maximum_event_age_in_seconds) == var.sms_sender_event_invoke_config.maximum_event_age_in_seconds, false)
+    error_message = "sms_sender_event_invoke_config.maximum_event_age_in_seconds must be an integer between 60 and 21600."
+  }
+
+  validation {
+    condition     = var.sms_sender_event_invoke_config == null || try(contains([0, 1, 2], var.sms_sender_event_invoke_config.maximum_retry_attempts), false)
+    error_message = "sms_sender_event_invoke_config.maximum_retry_attempts must be 0, 1, or 2."
+  }
+
+  validation {
+    condition     = var.sms_sender_event_invoke_config == null || try(var.sms_sender_event_invoke_config.on_failure_destination_arn == null || can(regex("^arn:[^:]+:(sqs|sns|lambda|events|s3):", var.sms_sender_event_invoke_config.on_failure_destination_arn)), false)
+    error_message = "sms_sender_event_invoke_config.on_failure_destination_arn must be an SQS queue, SNS topic, S3 bucket, Lambda function, or EventBridge event bus ARN."
   }
 }
 

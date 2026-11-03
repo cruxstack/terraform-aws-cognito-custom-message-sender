@@ -14,6 +14,19 @@ locals {
   sms_sender_policy_content             = var.sms_sender_policy_content
   sms_sender_throttle_period_in_minutes = var.sms_sender_throttle_period_in_minutes
 
+  # actions the execution role needs to deliver failed async events
+  failure_destination_actions = {
+    events = ["events:PutEvents"]
+    lambda = ["lambda:InvokeFunction"]
+    s3     = ["s3:ListBucket", "s3:PutObject"]
+    sns    = ["sns:Publish"]
+    sqs    = ["sqs:SendMessage"]
+  }
+  failure_destination_arns = toset(compact([
+    local.email_sender_enabled ? try(var.email_sender_event_invoke_config.on_failure_destination_arn, null) : null,
+    local.sms_sender_enabled ? try(var.sms_sender_event_invoke_config.on_failure_destination_arn, null) : null,
+  ]))
+
   iam_role_policies = {
     access = one(data.aws_iam_policy_document.this.*.json)
   }
@@ -148,6 +161,25 @@ data "aws_iam_policy_document" "this" {
     }
   }
 
+  dynamic "statement" {
+    for_each = local.failure_destination_arns
+    content {
+      effect    = "Allow"
+      actions   = local.failure_destination_actions[split(":", statement.value)[2]]
+      resources = split(":", statement.value)[2] == "s3" ? [statement.value, "${statement.value}/*"] : [statement.value]
+
+      # keeps records from reaching a same-named bucket in another account
+      dynamic "condition" {
+        for_each = split(":", statement.value)[2] == "s3" ? [true] : []
+        content {
+          test     = "StringEquals"
+          variable = "s3:ResourceAccount"
+          values   = [local.aws_account_id]
+        }
+      }
+    }
+  }
+
   depends_on = [
     module.kms_key
   ]
@@ -253,6 +285,27 @@ resource "aws_lambda_function" "sms_msg_sender" {
   depends_on = [
     buildkit_artifact.sms_msg_sender,
     aws_cloudwatch_log_group.sms_msg_sender,
+  ]
+}
+
+resource "aws_lambda_function_event_invoke_config" "sms_msg_sender" {
+  count = local.sms_sender_enabled && var.sms_sender_event_invoke_config != null ? 1 : 0
+
+  function_name                = aws_lambda_function.sms_msg_sender[0].function_name
+  maximum_event_age_in_seconds = var.sms_sender_event_invoke_config.maximum_event_age_in_seconds
+  maximum_retry_attempts       = var.sms_sender_event_invoke_config.maximum_retry_attempts
+
+  dynamic "destination_config" {
+    for_each = var.sms_sender_event_invoke_config.on_failure_destination_arn != null ? [var.sms_sender_event_invoke_config.on_failure_destination_arn] : []
+    content {
+      on_failure {
+        destination = destination_config.value
+      }
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy.this,
   ]
 }
 
@@ -448,6 +501,29 @@ resource "aws_lambda_function" "email_msg_sender" {
   depends_on = [
     buildkit_artifact.email_msg_sender,
     aws_cloudwatch_log_group.email_msg_sender,
+  ]
+}
+
+# cognito invokes custom sender triggers asynchronously; its codes expire within
+# minutes, so a late retry rarely helps the user
+resource "aws_lambda_function_event_invoke_config" "email_msg_sender" {
+  count = local.email_sender_enabled && var.email_sender_event_invoke_config != null ? 1 : 0
+
+  function_name                = aws_lambda_function.email_msg_sender[0].function_name
+  maximum_event_age_in_seconds = var.email_sender_event_invoke_config.maximum_event_age_in_seconds
+  maximum_retry_attempts       = var.email_sender_event_invoke_config.maximum_retry_attempts
+
+  dynamic "destination_config" {
+    for_each = var.email_sender_event_invoke_config.on_failure_destination_arn != null ? [var.email_sender_event_invoke_config.on_failure_destination_arn] : []
+    content {
+      on_failure {
+        destination = destination_config.value
+      }
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy.this,
   ]
 }
 
