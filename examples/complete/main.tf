@@ -8,40 +8,50 @@ locals {
 module "cognito_custom_message_sender" {
   source = "../.."
 
-  # SMS sender configuration
-  sms_sender_enabled                    = true
-  sms_sender_policy_content             = file("${path.module}/fixtures/policy.rego")
-  sms_sender_throttle_period_in_minutes = 15
+  # email sender
+  email_sender_enabled        = true
+  email_sender_policy_content = file("${path.module}/fixtures/email_policy.rego")
+  email_sender_providers      = ["ses"]
 
-  # Email sender configuration (uncomment to enable)
-  # email_sender_enabled        = true
-  # email_sender_policy_content = file("${path.module}/fixtures/email_policy.rego")
-  # email_sender_providers      = ["ses"]
+  # sms sender
+  sms_sender_enabled        = true
+  sms_sender_policy_content = file("${path.module}/fixtures/sms_policy.rego")
 
-  # Email verification (enabled by default with offline RFC 5322 validation)
-  # email_verification_enabled  = true
-  # email_verification_provider = "offline"
+  # rate limiting; both channels share one table
+  email_sender_rate_limit = { enabled = true }
+  sms_sender_rate_limit = {
+    enabled = true
+    global  = { mode = "count" }
+    classes = {
+      authentication = { global = [{ window = "1h", max = 1000 }] }
+    }
+  }
 
-  # Provider failover configuration (uncomment to enable)
-  # email_failover_enabled   = true
-  # email_failover_providers = ["sendgrid"]
-  # sendgrid_email_send_api_key = var.sendgrid_api_key
+  # failover to sendgrid (uncomment; the policy must return a sendgrid template)
+  # email_sender_providers      = ["ses", "sendgrid"]
+  # sendgrid_email_send_api_key = var.sendgrid_email_send_api_key
+
+  # async retries (defaults shown, plus an optional failure destination)
+  # email_sender_event_invoke_config = {
+  #   maximum_event_age_in_seconds = 300
+  #   maximum_retry_attempts       = 1
+  #   on_failure_destination_arn   = "arn:aws:sqs:us-east-1:123456789012:example-dlq"
+  # }
 
   context = module.example_label.context
 }
 
 module "cognito_userpool" {
   source  = "cruxstack/cognito-userpool/aws"
-  version = "0.1.2"
+  version = "1.10.0"
 
   deletion_protection      = false
   admin_create_user_config = { allow_admin_create_user_only = true }
 
   lambda_config = {
-    kms_key_id        = module.cognito_custom_message_sender.kms_key_arn
-    custom_sms_sender = { lambda_arn = module.cognito_custom_message_sender.sms_lambda_fn_arn, lambda_version = "V1_0" }
-    # Uncomment to use email sender
-    # custom_email_sender = { lambda_arn = module.cognito_custom_message_sender.email_lambda_fn_arn, lambda_version = "V1_0" }
+    kms_key_id          = module.cognito_custom_message_sender.kms_key_arn
+    custom_sms_sender   = { lambda_arn = module.cognito_custom_message_sender.sms_lambda_fn_arn, lambda_version = "V1_0" }
+    custom_email_sender = { lambda_arn = module.cognito_custom_message_sender.email_lambda_fn_arn, lambda_version = "V1_0" }
   }
 
   context = module.example_label.context

@@ -1,57 +1,36 @@
-# Contributing to Terraform AWS Cognito Custom SMS Sender Module
+# Contributing to Terraform AWS Cognito Custom Message Sender
 
 We welcome contributions to the project. This document provides information and
 guidelines for contributing.
 
-## Development Environment
+## How the module fits together
 
-This repository includes a configuration for a development container using the
-[VS Code Remote - Containers extension](https://code.visualstudio.com/docs/remote/containers).
-This setup allows you to develop within a Docker container that already has all
-the necessary tools and dependencies installed.
+Both Lambdas run [cognito-custom-message-sender-go](https://github.com/cruxstack/cognito-custom-message-sender-go).
+`assets/sender/Dockerfile` clones it at `sender_version`, builds it, and
+packages the binary with the email and SMS policies; the module passes its
+settings as `APP_*` environment variables. Changes to that contract (new
+settings, renamed variables) start in the Go repository, and the module pins
+the sender version that matches its variables.
 
-The development container is based on Ubuntu 20.04 (Focal) and includes the
-following tools:
+## Development environment
 
-- AWS CLI
-- Node.js
-- TypeScript
-- Docker CLI
-- Terraform
-- Open Policy Agent
+You need Terraform (1.7 or later), Docker, and optionally
+[TFLint](https://github.com/terraform-linters/tflint) and the
+[OPA CLI](https://www.openpolicyagent.org/docs/cli) for policies. A
+[dev container](.devcontainer) with these tools is included.
 
-### Prerequisites
+```sh
+terraform init
+terraform fmt -check -recursive
+terraform validate
+terraform test   # plans the module with mocked providers; no AWS account needed
+tflint
+```
 
-- [Docker](https://www.docker.com/products/docker-desktop) installed on your
-  local machine.
-- [Visual Studio Code](https://code.visualstudio.com/) installed on your
-  local machine.
-- [Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-  for Visual Studio Code.
-
-### Usage
-
-1. Clone this repository:
-
-    ```bash
-    git clone https://github.com/cruxstack/terraform-aws-cognito-custom-message-sender.git
-    code terraform-aws-cognito-custom-message-sender
-    ```
-
-2. When prompted to "Reopen in Container", click "Reopen in Container". This
-   will start building the Docker image for the development container. If you're
-   not prompted, you can open the Command Palette (F1 or Ctrl+Shift+P), and run
-   the "Remote-Containers: Reopen Folder in Container" command.
-
-3. After the development container is built and started, you can use the
-   Terminal in Visual Studio Code to interact with the container. All commands
-  you run in the Terminal will be executed inside the container.
-
-### Troubleshooting
-
-If you encounter any issues while using the development container, you can try
-rebuilding the container. To do this, open the Command Palette and run the
-"Remote-Containers: Rebuild Container" command.
+`tests/sender.tftest.hcl` checks the planned Lambdas, environment variables,
+tables, and input validation. Add a run block when you add a variable or
+change what the module passes to the sender. To deploy for real, use
+`examples/complete`.
 
 ## Contribution Guidelines
 
