@@ -10,15 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
       - name: Terraform Setup
         run:  terraform init
       - name: Terraform Validate
         run:  terraform validate
       - name: Lint Terraform
-        uses: reviewdog/action-tflint@master
+        uses: reviewdog/action-tflint@c332ae72f14fd853c08323a60383b396cc34715a # v1.28.0
         with:
           github_token: ${{ secrets.github_token }}
           filter_mode: "nofilter"
